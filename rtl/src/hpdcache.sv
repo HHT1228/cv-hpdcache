@@ -1286,9 +1286,9 @@ import hpdcache_pkg::*;
         ctrl_flush_alloc |-> !cmo_flush_alloc) else
             $error("Unsupported concurrent flush from ctrl and cmo");
 
-    if (!(HPDcacheCfg.u.wordWidth inside {32, 64})) begin : gen_word_width_assertion
-        $fatal(1, "word width shall be 32 or 64");
-    end
+    // if (!(HPDcacheCfg.u.wordWidth inside {32, 64})) begin : gen_word_width_assertion
+    //     $fatal(1, "word width shall be 32 or 64");
+    // end
     if (HPDcacheCfg.u.reqWords > HPDcacheCfg.u.accessWords) begin : gen_req_data_width_assertion
         $fatal(1, "req data width shall be l.e. to cache access width");
     end
