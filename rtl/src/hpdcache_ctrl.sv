@@ -60,7 +60,10 @@ import hpdcache_pkg::*;
     parameter type hpdcache_req_be_t = logic,
 
     parameter type hpdcache_req_t = logic,
-    parameter type hpdcache_rsp_t = logic
+    parameter type hpdcache_rsp_t = logic,
+
+    // Coherence support parameters
+    parameter type hpdcache_dir_addr_t = logic
 )
     // }}}
 
@@ -264,7 +267,13 @@ import hpdcache_pkg::*;
     output logic                  evt_req_on_hold_o,
     output logic                  evt_rtab_rollback_o,
     output logic                  evt_stall_refill_o,
-    output logic                  evt_stall_o
+    output logic                  evt_stall_o,
+
+    // Coherence support signals
+    input  logic                  read_dir_coherence_i,
+    input  hpdcache_dir_addr_t    read_dir_coherence_set_i,
+    input  hpdcache_tag_t         read_dir_coherence_tag_i,
+    output hpdcache_dir_entry_t   read_dir_coherence_rdata_o
 );
     // }}}
 
@@ -921,7 +930,8 @@ import hpdcache_pkg::*;
         .hpdcache_req_data_t           (hpdcache_req_data_t),
         .hpdcache_req_be_t             (hpdcache_req_be_t),
         .hpdcache_access_data_t        (hpdcache_access_data_t),
-        .hpdcache_access_be_t          (hpdcache_access_be_t)
+        .hpdcache_access_be_t          (hpdcache_access_be_t),
+        .hpdcache_dir_addr_t           (hpdcache_dir_addr_t)
     ) hpdcache_memctrl_i(
         .clk_i,
         .rst_ni,
@@ -1025,7 +1035,12 @@ import hpdcache_pkg::*;
         .data_refill_set_i             (refill_set_i),
         .data_refill_way_i             (refill_way_i),
         .data_refill_word_i            (refill_word_i),
-        .data_refill_data_i            (refill_data_i)
+        .data_refill_data_i            (refill_data_i),
+
+        .read_dir_coherence_i          (read_dir_coherence_i),
+        .read_dir_coherence_set_i      (read_dir_coherence_set_i),
+        .read_dir_coherence_tag_i      (read_dir_coherence_tag_i),
+        .read_dir_coherence_rdata_o    (read_dir_coherence_rdata_o)
     );
 
     assign st1_dir_hit           = |st1_dir_hit_way;

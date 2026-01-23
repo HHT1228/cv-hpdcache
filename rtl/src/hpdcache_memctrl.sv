@@ -24,6 +24,11 @@
  *  Description   : HPDcache Directory and Data Memory RAMs Controller
  *  History       :
  */
+
+`include "common_cells/registers.svh"
+
+`define NO_COHERENCE
+
 module hpdcache_memctrl
 import hpdcache_pkg::*;
     //  Parameters
@@ -45,7 +50,10 @@ import hpdcache_pkg::*;
     parameter type hpdcache_req_be_t = logic,
 
     parameter type hpdcache_access_data_t = logic,
-    parameter type hpdcache_access_be_t = logic
+    parameter type hpdcache_access_be_t = logic,
+
+    // Coherence support parameters
+    parameter type hpdcache_dir_addr_t = logic
 )
     //  }}}
 
@@ -165,8 +173,14 @@ import hpdcache_pkg::*;
     input  hpdcache_set_t                       data_refill_set_i,
     input  hpdcache_way_vector_t                data_refill_way_i,
     input  hpdcache_word_t                      data_refill_word_i,
-    input  hpdcache_access_data_t               data_refill_data_i
+    input  hpdcache_access_data_t               data_refill_data_i,
     //      }}}
+
+    // Coherence support
+    input  logic                                read_dir_coherence_i,
+    input  hpdcache_dir_addr_t                  read_dir_coherence_set_i,
+    input  hpdcache_tag_t                       read_dir_coherence_tag_i,
+    output hpdcache_dir_entry_t                 read_dir_coherence_rdata_o
 );
     //  }}}
 
@@ -188,7 +202,7 @@ import hpdcache_pkg::*;
     localparam int unsigned HPDCACHE_DATA_RAM_X_CUTS = HPDcacheCfg.u.accessWords;
     localparam int unsigned HPDCACHE_ALL_CUTS = HPDCACHE_DATA_RAM_X_CUTS*HPDCACHE_DATA_RAM_Y_CUTS;
 
-    typedef logic [HPDCACHE_DIR_RAM_ADDR_WIDTH-1:0] hpdcache_dir_addr_t;
+    // typedef logic [HPDCACHE_DIR_RAM_ADDR_WIDTH-1:0] hpdcache_dir_addr_t;
 
     typedef logic [HPDCACHE_DATA_RAM_ADDR_WIDTH-1:0] hpdcache_data_ram_addr_t;
     typedef hpdcache_data_word_t[HPDcacheCfg.u.dataWaysPerRamWord-1:0] hpdcache_data_ram_data_t;
@@ -338,6 +352,16 @@ import hpdcache_pkg::*;
     hpdcache_way_vector_t                      dir_inval_hit_way;
     //  }}}
 
+    // Coherence support local signals
+    logic                                      read_dir_coherence_q;
+    hpdcache_tag_t                             read_dir_coherence_tag_q;
+    logic                                      dir_read_performed;
+
+    hpdcache_dir_addr_t                           coherence_dir_addr, served_dir_addr;
+    hpdcache_way_vector_t                         coherence_dir_cs, served_dir_cs;
+    hpdcache_way_vector_t                         coherence_dir_we, served_dir_we;
+    hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] coherence_dir_wentry, served_dir_wentry;
+
     //  Init FSM
     //  {{{
     always_comb
@@ -388,10 +412,17 @@ import hpdcache_pkg::*;
             ) dir_sram (
                 .clk       (clk_i),
                 .rst_n     (rst_ni),
+`ifdef NO_COHERENCE
                 .cs        (dir_cs[dir_w]),
                 .we        (dir_we[dir_w]),
                 .addr      (dir_addr),
                 .wdata     (dir_wentry[dir_w]),
+`else
+                .cs        (served_dir_cs[dir_w]),
+                .we        (served_dir_we[dir_w]),
+                .addr      (served_dir_addr),
+                .wdata     (served_dir_wentry[dir_w]),
+`endif
                 .rdata     (dir_rentry[dir_w])
             );
         end
@@ -518,6 +549,7 @@ import hpdcache_pkg::*;
 
                 for (hpdcache_uint i = 0; i < HPDcacheCfg.u.ways; i++) begin
                     dir_wentry[i] = '{
+                        coherence_state: '0,            // TODO
                         valid: dir_cmo_updt_valid_i,
                         wback: dir_cmo_updt_wback_i,
                         dirty: dir_cmo_updt_dirty_i,
@@ -535,6 +567,7 @@ import hpdcache_pkg::*;
 
                 for (hpdcache_uint i = 0; i < HPDcacheCfg.u.ways; i++) begin
                     dir_wentry[i] = '{
+                        coherence_state: '0,            // TODO
                         valid: dir_updt_valid_i,
                         wback: dir_updt_wback_i,
                         dirty: dir_updt_dirty_i,
@@ -543,6 +576,16 @@ import hpdcache_pkg::*;
                     };
                 end
             end
+
+            // Read directory entry for coherence support
+            // FIXME: unique case conflict
+            // Maybe need a FIFO-based arbiter to latch conflict dir req
+            // read_dir_coherence_i: begin
+            //     dir_addr    = read_dir_coherence_set_i;
+            //     dir_cs      = '1;
+            //     dir_we      = '0;
+            //     dir_wentry  = '0;
+            // end
 
             //  Do nothing
             default: begin
@@ -555,6 +598,80 @@ import hpdcache_pkg::*;
     end
 
     //  }}}
+
+    // Read directory entry for coherence support
+    always_comb begin : coherence_dir_read
+        coherence_dir_addr    = read_dir_coherence_set_i;
+        coherence_dir_cs      = '1;
+        coherence_dir_we      = '0;
+        coherence_dir_wentry  = '0;
+    end
+
+`ifndef NO_COHERENCE
+    // Arbitrate directory read requests
+    dir_read_arb #(
+        .NumWays                (HPDcacheCfg.u.ways),
+
+        .hpdcache_dir_addr_t    (hpdcache_dir_addr_t),
+        .hpdcache_way_vector_t  (hpdcache_way_vector_t),
+        .hpdcache_dir_entry_t   (hpdcache_dir_entry_t)
+    ) i_dir_read_arb (
+        .clk_i(clk_i),
+        .rst_ni(rst_ni),
+
+        .comb_dir_addr_i(dir_addr),
+        .comb_dir_cs_i(dir_cs),
+        .comb_dir_we_i(dir_we),
+        .comb_dir_wentry_i(dir_wentry),
+
+        .coherence_req_i(read_dir_coherence_i),
+        .coherence_dir_addr_i(coherence_dir_addr),
+        .coherence_dir_cs_i(coherence_dir_cs),
+        .coherence_dir_we_i(coherence_dir_we),
+        .coherence_dir_wentry_i(coherence_dir_wentry),
+
+        .dir_addr_o(served_dir_addr),
+        .dir_cs_o(served_dir_cs),
+        .dir_we_o(served_dir_we),
+        .dir_wentry_o(served_dir_wentry)
+    );
+`endif
+
+    // Latch the flag to accomodate for SRAM latency
+    // always_ff @(posedge clk_i or negedge rst_ni) begin
+    //     if (!rst_ni) begin
+    //         read_dir_coherence_q <= 1'b0;
+    //     end else begin
+    //         read_dir_coherence_q <= read_dir_coherence_i;
+    //     end
+    // end
+    `FF(read_dir_coherence_q, read_dir_coherence_i, clk_i, rst_ni)
+    `FF(read_dir_coherence_tag_q, read_dir_coherence_tag_i, clk_i, rst_ni)
+
+    // Return directory entry for coherence support
+    // assign read_dir_coherence_rdata_o = read_dir_coherence_q ? dir_rentry[0] : '0;
+    hpdcache_dir_entry_t coherence_rentry;
+    hpdcache_tag_t [HPDcacheCfg.u.ways-1:0] coherence_dir_tags;
+    // hpdcache_way_vector_t coherence_dir_hit_way;
+    logic coherence_curr_line_hit;
+
+    always_comb begin
+        coherence_curr_line_hit = 1'b0;
+        // coherence_dir_hit_way = '0;
+
+        for (int i = 0; i < int'(HPDcacheCfg.u.ways); i++) begin
+            hpdcache_tag_t local_tag;
+            local_tag = dir_rentry[i].tag;
+
+            if (!coherence_curr_line_hit && (local_tag == read_dir_coherence_tag_q)) begin
+                coherence_curr_line_hit = 1'b1;
+                // coherence_dir_hit_way[i] = 1'b1;
+                coherence_rentry = dir_rentry[i];
+            end
+        end
+    end
+
+    assign read_dir_coherence_rdata_o = read_dir_coherence_q ? coherence_rentry : '0;
 
     //  Directory hit logic
     //  {{{

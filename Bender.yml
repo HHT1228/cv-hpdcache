@@ -3,10 +3,16 @@ package:
   authors:
     - "César Fuguet <cesar.fuguet@univ-grenoble-alpes.fr>"
 
+dependencies:
+  common_cells:       { git: "https://github.com/pulp-platform/common_cells.git",       version: 1.28.0         }
+
 export_include_dirs:
   - rtl/include
 
 sources:
+  # - rtl/src/ext_dep/fifo_v3.sv
+  # - rtl/src/fifo.sv
+  - rtl/src/dir_read_arb.sv
   - rtl/src/common/macros/behav/hpdcache_sram_1rw.sv
   - rtl/src/common/macros/behav/hpdcache_sram_wbyteenable_1rw.sv
   - rtl/src/common/macros/behav/hpdcache_sram_wmask_1rw.sv

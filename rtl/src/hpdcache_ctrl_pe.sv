@@ -231,6 +231,12 @@ import hpdcache_pkg::*;
     logic  st0_req_cachedata_read, st1_req_cachedata_read;
     //  }}}
 
+    // TODO: for debug purpose, need to move to automatic inside always_comb
+    logic nop;
+    logic st1_nop; //  Do not consume a request in stage 0 because of stage 1 hazard
+    logic st2_nop; //  Do not consume a request in stage 0 because of stage 2 hazard
+    logic st1_req_is_cacheable_store;
+
     //  Global control signals
     //  {{{
 
@@ -279,10 +285,11 @@ import hpdcache_pkg::*;
     //  {{{
     always_comb
     begin : hpdcache_ctrl_comb
-        automatic logic nop;
-        automatic logic st1_nop; //  Do not consume a request in stage 0 because of stage 1 hazard
-        automatic logic st2_nop; //  Do not consume a request in stage 0 because of stage 2 hazard
-        automatic logic st1_req_is_cacheable_store;
+        // TODO: recover after debug
+        // automatic logic nop;
+        // automatic logic st1_nop; //  Do not consume a request in stage 0 because of stage 1 hazard
+        // automatic logic st2_nop; //  Do not consume a request in stage 0 because of stage 2 hazard
+        // automatic logic st1_req_is_cacheable_store;
 
         uc_req_valid_o                      = 1'b0;
 

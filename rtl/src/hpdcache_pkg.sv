@@ -310,6 +310,24 @@ package hpdcache_pkg;
         //  Reserved           = 4'b1111
     } hpdcache_mem_atomic_e;
 
+    /***************
+    * Coherence typedefs
+    ***************/
+    typedef enum logic [3:0] {
+        CACHE_INVALID   = 4'b0000,
+        CACHE_SHARED    = 4'b0001,
+        CACHE_EXCLUSIVE = 4'b0010,
+        CACHE_MODIFIED  = 4'b0011,
+
+        // Transient states
+        CACHE_ISD       = 4'b0100,
+        CACHE_SMA       = 4'b0101,
+        CACHE_MIA       = 4'b0110,
+        CACHE_EIA       = 4'b0111,
+        CACHE_SIA       = 4'b1000,
+        CACHE_IIA       = 4'b1001
+    } hpd_coherence_state_t;
+
     function automatic hpdcache_mem_size_t get_hpdcache_mem_size(int unsigned bytes);
         if      (bytes ==   0) return 0;
         else if (bytes <=   2) return 1;

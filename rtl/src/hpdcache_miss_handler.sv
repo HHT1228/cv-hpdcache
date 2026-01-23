@@ -562,6 +562,7 @@ import hpdcache_pkg::*;
     //  Write the new entry in the cache directory
     //  In case of error in the refill response, invalidate pre-allocated cache directory entry
     assign refill_dir_entry_o = '{
+        coherence_state: '0,                                  // TODO
         valid   : ~refill_is_error_o,
         wback   : ~refill_is_error_o & refill_wback_q,
         dirty   : ~refill_is_error_o & refill_dirty_q,

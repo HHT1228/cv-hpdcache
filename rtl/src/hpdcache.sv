@@ -155,6 +155,9 @@ import hpdcache_pkg::*;
     //  Cache Directory entry definition
     //  {{{
     typedef struct packed {
+        // CACHE_INVALID should be sync with valid bit
+        hpd_coherence_state_t coherence_state;
+
         //  Cacheline state
         //  Encoding: {valid, wb, dirty, fetch}
         //            {0,X,X,0}: Invalid
@@ -184,6 +187,10 @@ import hpdcache_pkg::*;
     typedef hpdcache_req_data_t wbuf_data_t;
     typedef hpdcache_req_be_t wbuf_be_t;
     //  }}}
+
+    // Coherence support types
+    localparam int unsigned HPDCACHE_DIR_RAM_ADDR_WIDTH = $clog2(HPDcacheCfg.u.sets);
+    typedef logic [HPDCACHE_DIR_RAM_ADDR_WIDTH-1:0] hpdcache_dir_addr_t;
 
     //  Declaration of internal signals
     //  {{{
@@ -410,6 +417,12 @@ import hpdcache_pkg::*;
 
     logic                  cfg_default_wb;
 
+    // local signals for coherence support
+    logic                  read_dir_coherence;
+    hpdcache_dir_addr_t    read_dir_coherence_addr;
+    hpdcache_dir_entry_t   read_dir_coherence_rdata;
+    hpdcache_tag_t         read_dir_coherence_tag;
+
     localparam logic [HPDcacheCfg.u.memIdWidth-1:0] HPDCACHE_UC_READ_ID =
         {HPDcacheCfg.u.memIdWidth{1'b1}};
     localparam logic [HPDcacheCfg.u.memIdWidth-1:0] HPDCACHE_UC_WRITE_ID =
@@ -458,6 +471,11 @@ import hpdcache_pkg::*;
         assign cfg_default_wb = 1'b1;
     end
 
+    // Read directory on every request
+    assign read_dir_coherence = arb_req_valid;
+    assign read_dir_coherence_addr = arb_req.addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
+    assign read_dir_coherence_tag = arb_req.addr_tag;
+
     hpdcache_ctrl #(
         .HPDcacheCfg                        (HPDcacheCfg),
         .hpdcache_nline_t                   (hpdcache_nline_t),
@@ -481,7 +499,8 @@ import hpdcache_pkg::*;
         .hpdcache_req_data_t                (hpdcache_req_data_t),
         .hpdcache_req_be_t                  (hpdcache_req_be_t),
         .hpdcache_req_t                     (hpdcache_req_t),
-        .hpdcache_rsp_t                     (hpdcache_rsp_t)
+        .hpdcache_rsp_t                     (hpdcache_rsp_t),
+        .hpdcache_dir_addr_t                (hpdcache_dir_addr_t)
     ) hpdcache_ctrl_i(
         .clk_i,
         .rst_ni,
@@ -667,7 +686,12 @@ import hpdcache_pkg::*;
         .evt_req_on_hold_o,
         .evt_rtab_rollback_o,
         .evt_stall_refill_o,
-        .evt_stall_o
+        .evt_stall_o,
+
+        .read_dir_coherence_i               (read_dir_coherence),
+        .read_dir_coherence_set_i           (read_dir_coherence_addr),
+        .read_dir_coherence_tag_i           (read_dir_coherence_tag),
+        .read_dir_coherence_rdata_o         (read_dir_coherence_rdata)
     );
     //  }}}
 
