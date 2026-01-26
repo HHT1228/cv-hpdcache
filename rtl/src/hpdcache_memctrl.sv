@@ -27,7 +27,7 @@
 
 `include "common_cells/registers.svh"
 
-`define NO_COHERENCE
+// `define NO_COHERENCE
 
 module hpdcache_memctrl
 import hpdcache_pkg::*;
@@ -645,8 +645,8 @@ import hpdcache_pkg::*;
     //         read_dir_coherence_q <= read_dir_coherence_i;
     //     end
     // end
-    `FF(read_dir_coherence_q, read_dir_coherence_i, clk_i, rst_ni)
-    `FF(read_dir_coherence_tag_q, read_dir_coherence_tag_i, clk_i, rst_ni)
+    `FF(read_dir_coherence_q, read_dir_coherence_i, 1'b0, clk_i, rst_ni)
+    `FF(read_dir_coherence_tag_q, read_dir_coherence_tag_i, '0, clk_i, rst_ni)
 
     // Return directory entry for coherence support
     // assign read_dir_coherence_rdata_o = read_dir_coherence_q ? dir_rentry[0] : '0;
