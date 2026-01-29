@@ -25,7 +25,10 @@ module dir_read_arb #(
   output hpdcache_dir_addr_t                           dir_addr_o,
   output hpdcache_way_vector_t                         dir_cs_o,
   output hpdcache_way_vector_t                         dir_we_o,
-  output hpdcache_dir_entry_t            [NumWays-1:0] dir_wentry_o
+  output hpdcache_dir_entry_t            [NumWays-1:0] dir_wentry_o,
+
+  output logic                                         comb_gnt_o,
+  output logic                                         coherence_gnt_o
 );
 
   typedef struct packed {
@@ -36,8 +39,8 @@ module dir_read_arb #(
   } dir_req_pack_t;
 
   dir_req_pack_t comb_req_pack, coherence_req_pack, final_req_pack;
-  dir_req_pack_t [1:0] req_pack_combined;
-  logic req_valid;
+  // dir_req_pack_t [1:0] req_pack_combined;
+  // logic req_valid;
 
   assign comb_req_pack.dir_addr    = comb_dir_addr_i;
   assign comb_req_pack.dir_cs      = comb_dir_cs_i;
@@ -49,15 +52,15 @@ module dir_read_arb #(
   assign coherence_req_pack.dir_we      = coherence_dir_we_i;
   assign coherence_req_pack.dir_wentry  = coherence_dir_wentry_i;
 
-  assign req_pack_combined[0] = comb_req_pack;
-  assign req_pack_combined[1] = coherence_req_pack;
+  // assign req_pack_combined[0] = comb_req_pack;
+  // assign req_pack_combined[1] = coherence_req_pack;
 
   assign dir_addr_o   = final_req_pack.dir_addr;
   assign dir_cs_o     = final_req_pack.dir_cs;
   assign dir_we_o     = final_req_pack.dir_we;
   assign dir_wentry_o = final_req_pack.dir_wentry;
 
-  assign req_valid = (comb_dir_cs_i != '0) || coherence_req_i;
+  // assign req_valid = (comb_dir_cs_i != '0) || coherence_req_i;
 
   rr_arb_tree #(
     .NumIn     (2),
@@ -68,9 +71,9 @@ module dir_read_arb #(
     .rst_ni  (rst_ni),
     .flush_i (1'b0),
     .rr_i    (1'b1),
-    .req_i   (req_valid),  // valid_i
-    .gnt_o   (),  // ready_o
-    .data_i  (req_pack_combined),
+    .req_i   ({(comb_dir_cs_i != '0), coherence_req_i}),  // valid_i
+    .gnt_o   ({comb_gnt_o, coherence_gnt_o}),  // ready_o
+    .data_i  ({comb_req_pack, coherence_req_pack}),
     .req_o   (),            // valid_o
     .gnt_i   (1'b1),                           // ready_i
     .data_o  (final_req_pack),

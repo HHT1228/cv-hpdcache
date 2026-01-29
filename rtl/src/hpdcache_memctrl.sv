@@ -180,7 +180,8 @@ import hpdcache_pkg::*;
     input  logic                                read_dir_coherence_i,
     input  hpdcache_dir_addr_t                  read_dir_coherence_set_i,
     input  hpdcache_tag_t                       read_dir_coherence_tag_i,
-    output hpdcache_dir_entry_t                 read_dir_coherence_rdata_o
+    output hpdcache_dir_entry_t                 read_dir_coherence_rdata_o,
+    output logic                                coherence_dir_bank_gnt_o
 );
     //  }}}
 
@@ -353,14 +354,16 @@ import hpdcache_pkg::*;
     //  }}}
 
     // Coherence support local signals
-    logic                                      read_dir_coherence_q;
-    hpdcache_tag_t                             read_dir_coherence_tag_q;
+    logic                                      read_dir_coherence_q, read_dir_coherence_d;
+    hpdcache_tag_t                             read_dir_coherence_tag_q, read_dir_coherence_tag_d;
     logic                                      dir_read_performed;
 
     hpdcache_dir_addr_t                           coherence_dir_addr, served_dir_addr;
     hpdcache_way_vector_t                         coherence_dir_cs, served_dir_cs;
     hpdcache_way_vector_t                         coherence_dir_we, served_dir_we;
     hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] coherence_dir_wentry, served_dir_wentry;
+
+    logic                                      coherence_dir_bank_gnt;
 
     //  Init FSM
     //  {{{
@@ -633,8 +636,13 @@ import hpdcache_pkg::*;
         .dir_addr_o(served_dir_addr),
         .dir_cs_o(served_dir_cs),
         .dir_we_o(served_dir_we),
-        .dir_wentry_o(served_dir_wentry)
+        .dir_wentry_o(served_dir_wentry),
+
+        .comb_gnt_o(),
+        .coherence_gnt_o(coherence_dir_bank_gnt)
     );
+
+    assign coherence_dir_bank_gnt_o = coherence_dir_bank_gnt;
 `endif
 
     // Latch the flag to accomodate for SRAM latency
@@ -645,8 +653,28 @@ import hpdcache_pkg::*;
     //         read_dir_coherence_q <= read_dir_coherence_i;
     //     end
     // end
-    `FF(read_dir_coherence_q, read_dir_coherence_i, 1'b0, clk_i, rst_ni)
-    `FF(read_dir_coherence_tag_q, read_dir_coherence_tag_i, '0, clk_i, rst_ni)
+    // `FF(read_dir_coherence_q, read_dir_coherence_i, 1'b0, clk_i, rst_ni)
+    // `FF(read_dir_coherence_tag_q, read_dir_coherence_tag_i, '0, clk_i, rst_ni)
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            read_dir_coherence_q      <= 1'b0;
+            read_dir_coherence_tag_q  <= '0;
+        end else if (read_dir_coherence_i) begin
+            // Load
+            read_dir_coherence_q      <= read_dir_coherence_i;
+            read_dir_coherence_tag_q  <= read_dir_coherence_tag_i;
+        end else begin
+            // Hold
+            read_dir_coherence_q      <= read_dir_coherence_d;
+            read_dir_coherence_tag_q  <= read_dir_coherence_tag_d;
+        end
+    end
+
+    always_comb begin
+        read_dir_coherence_d      = read_dir_coherence_q;
+        read_dir_coherence_tag_d  = read_dir_coherence_tag_q;
+    end
 
     // Return directory entry for coherence support
     // assign read_dir_coherence_rdata_o = read_dir_coherence_q ? dir_rentry[0] : '0;
@@ -663,7 +691,10 @@ import hpdcache_pkg::*;
             hpdcache_tag_t local_tag;
             local_tag = dir_rentry[i].tag;
 
-            if (!coherence_curr_line_hit && (local_tag == read_dir_coherence_tag_q)) begin
+            // TODO: outrule '0 tag
+            if (!coherence_curr_line_hit && 
+                (local_tag == read_dir_coherence_tag_q) &&
+                (read_dir_coherence_tag_q != '0)) begin
                 coherence_curr_line_hit = 1'b1;
                 // coherence_dir_hit_way[i] = 1'b1;
                 coherence_rentry = dir_rentry[i];
@@ -680,6 +711,7 @@ import hpdcache_pkg::*;
     hpdcache_way_vector_t cmo_hit;
     hpdcache_way_vector_t inval_hit;
 
+    // TODO: add hanshake for dir read and extra cycle FF for delayed req (arbiter)
     for (gen_i = 0; gen_i < int'(HPDcacheCfg.u.ways); gen_i++)
     begin : gen_dir_match_tag
         assign dir_tags[gen_i] = dir_rentry[gen_i].tag;

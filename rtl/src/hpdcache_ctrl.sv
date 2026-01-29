@@ -288,6 +288,28 @@ import hpdcache_pkg::*;
     } rtab_entry_t;
     //  }}}
 
+    // Coherence support typedefs
+    typedef struct packed {
+        logic send_to_dir;
+        logic hit;                  // do nothing on hit
+        logic stall;
+        logic update_line_state;
+    } coherence_actions_t;
+
+    typedef enum logic [3:0] {
+        OP_NONE               = 4'd0,
+        OP_READ               = 4'd1, // GetS from requester
+        OP_WRITE              = 4'd2, // GetE/Upgrade from requester
+        OP_GET                = 4'd3, // Owner reply with latest data (after probe)
+        OP_EVICT              = 4'd4, // PutS from evictor
+        OP_INV                = 4'd5, // PutM from current owner
+        OP_EVICT_ACK          = 4'd6, // PutM from non-owner (illegal but Ack)
+        OP_EXC_DATA           = 4'd7, // PutE from owner
+        OP_DATA               = 4'd8, // PutE from non-owner (illegal but Ack)
+        OP_INV_ACK            = 4'd9,
+        OP_LAST_INV_ACK       = 4'd10
+    } coherence_op_t;
+
     //  Definition of internal registers
     //  {{{
     logic                    st1_req_valid_q, st1_req_valid_d;
@@ -430,6 +452,12 @@ import hpdcache_pkg::*;
     hpdcache_way_vector_t    data_req_read_way;
     hpdcache_req_data_t      data_req_read_data;
     //  }}}
+
+    // Coherence support internal signals
+    hpd_coherence_state_t    coherence_state_q, coherence_state_d;
+    coherence_actions_t      coherence_act;
+    coherence_op_t           coherence_op;
+    logic                    read_dir_coherence_gnt;
 
     //  Decoding of the request in stage 0
     //  {{{
@@ -724,6 +752,93 @@ import hpdcache_pkg::*;
     assign st1_dir_victim_unavailable = ~(|st1_dir_victim_way);
 
     //  }}}
+
+    // TODO: coherence op decode
+    // TODO: sync CACHE_INVALID with invalid bit
+    // Coherence support logic
+    always_comb begin : coherence_logic
+        // Default: hold
+        coherence_state_d = coherence_state_q;
+        coherence_act = '0;
+
+        unique case (coherence_state_q)
+            CACHE_INVALID: begin
+                unique case(coherence_op)
+                    OP_READ: begin
+                        coherence_act.send_to_dir       = 1'b1;
+                        coherence_act.hit               = 1'b0;
+                        coherence_act.stall             = 1'b0;
+                        coherence_act.update_line_state = 1'b1;
+                        coherence_state_d               = CACHE_ISD;
+                    end
+                    OP_WRITE: begin
+                        coherence_act.send_to_dir       = 1'b1;
+                        coherence_act.hit               = 1'b0;
+                        coherence_act.stall             = 1'b0;
+                        coherence_act.update_line_state = 1'b1;
+                        coherence_state_d               = CACHE_INVALID;
+                    end
+                    default: ;
+                endcase
+            end
+            CACHE_SHARED: begin
+                unique case(coherence_op)
+                // TODO: CHECK, CONTINUE HERE
+                    OP_READ: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b1;
+                        coherence_act.stall             = 1'b0;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_SHARED;
+                    end
+                    OP_WRITE: begin
+                        coherence_act.send_to_dir       = 1'b1;
+                        coherence_act.hit               = 1'b0;
+                        coherence_act.stall             = 1'b1;
+                        coherence_act.update_line_state = 1'b1;
+                        coherence_state_d               = CACHE_INVALID;
+                    end
+                    default: ;
+                endcase
+            end
+            CACHE_EXCLUSIVE: begin
+
+            end
+            CACHE_MODIFIED: begin
+
+            end
+
+            CACHE_ISD: begin
+                
+            end
+            CACHE_SMA: begin
+
+            end
+            CACHE_MIA: begin
+
+            end
+            CACHE_EIA: begin
+
+            end
+            CACHE_SIA: begin
+
+            end
+            CACHE_IIA: begin
+
+            end
+            default: ;
+        endcase
+    end
+    
+    always_ff @(posedge clk_i or negedge rst_ni) begin : coherence_state_ff
+        if (!rst_ni) begin
+            coherence_state_q <= CACHE_INVALID;
+        end else if (read_dir_coherence_gnt) begin
+            coherence_state_q <= read_dir_coherence_rdata_o.coherence_state;
+        end else begin
+            coherence_state_q <= coherence_state_d;
+        end
+    end
 
     //  Replay table
     //  {{{
@@ -1040,7 +1155,8 @@ import hpdcache_pkg::*;
         .read_dir_coherence_i          (read_dir_coherence_i),
         .read_dir_coherence_set_i      (read_dir_coherence_set_i),
         .read_dir_coherence_tag_i      (read_dir_coherence_tag_i),
-        .read_dir_coherence_rdata_o    (read_dir_coherence_rdata_o)
+        .read_dir_coherence_rdata_o    (read_dir_coherence_rdata_o),
+        .coherence_dir_bank_gnt_o      (read_dir_coherence_gnt)
     );
 
     assign st1_dir_hit           = |st1_dir_hit_way;
