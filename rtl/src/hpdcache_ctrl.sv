@@ -783,7 +783,6 @@ import hpdcache_pkg::*;
             end
             CACHE_SHARED: begin
                 unique case(coherence_op)
-                // TODO: CHECK, CONTINUE HERE
                     OP_READ: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b1;
@@ -794,37 +793,123 @@ import hpdcache_pkg::*;
                     OP_WRITE: begin
                         coherence_act.send_to_dir       = 1'b1;
                         coherence_act.hit               = 1'b0;
-                        coherence_act.stall             = 1'b1;
+                        coherence_act.stall             = 1'b0;
                         coherence_act.update_line_state = 1'b1;
-                        coherence_state_d               = CACHE_INVALID;
+                        coherence_state_d               = CACHE_SMA;
                     end
                     default: ;
                 endcase
             end
             CACHE_EXCLUSIVE: begin
-
+                unique case(coherence_op)
+                    OP_READ: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b1;
+                        coherence_act.stall             = 1'b0;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_EXCLUSIVE;
+                    end
+                    OP_WRITE: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b1;
+                        coherence_act.stall             = 1'b0;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_MODIFIED;
+                    end
+                    default: ;
+                endcase
             end
             CACHE_MODIFIED: begin
-
+                unique case(coherence_op)
+                    OP_READ, OP_WRITE: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b1;
+                        coherence_act.stall             = 1'b0;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_MODIFIED;
+                    end
+                    default: ;
+                endcase
             end
 
             CACHE_ISD: begin
-                
+                unique case(coherence_op)
+                    OP_READ, OP_WRITE, OP_EVICT, OP_INV: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b0;
+                        coherence_act.stall             = 1'b1;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_ISD;
+                    end
+                    default: ;
+                endcase
             end
             CACHE_SMA: begin
-
+                unique case(coherence_op)
+                    OP_READ: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b1;
+                        coherence_act.stall             = 1'b0;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_SMA;
+                    end
+                    OP_WRITE, OP_EVICT: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b0;
+                        coherence_act.stall             = 1'b1;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_SMA;
+                    end
+                    default: ;
+                endcase
             end
             CACHE_MIA: begin
-
+                unique case(coherence_op)
+                    OP_READ, OP_WRITE, OP_EVICT: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b0;
+                        coherence_act.stall             = 1'b1;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_MIA;
+                    end
+                    default: ;
+                endcase
             end
             CACHE_EIA: begin
-
+                unique case(coherence_op)
+                    OP_READ, OP_WRITE, OP_EVICT: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b0;
+                        coherence_act.stall             = 1'b1;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_EIA;
+                    end
+                    default: ;
+                endcase
             end
             CACHE_SIA: begin
-
+                unique case(coherence_op)
+                    OP_READ, OP_WRITE, OP_EVICT: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b0;
+                        coherence_act.stall             = 1'b1;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_SIA;
+                    end
+                    default: ;
+                endcase
             end
             CACHE_IIA: begin
-
+                unique case(coherence_op)
+                    OP_READ, OP_WRITE, OP_EVICT: begin
+                        coherence_act.send_to_dir       = 1'b0;
+                        coherence_act.hit               = 1'b0;
+                        coherence_act.stall             = 1'b1;
+                        coherence_act.update_line_state = 1'b0;
+                        coherence_state_d               = CACHE_IIA;
+                    end
+                    default: ;
+                endcase
             end
             default: ;
         endcase
