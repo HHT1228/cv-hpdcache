@@ -314,19 +314,26 @@ package hpdcache_pkg;
     * Coherence typedefs
     ***************/
     typedef enum logic [3:0] {
-        CACHE_INVALID   = 4'b0000,
-        CACHE_SHARED    = 4'b0001,
-        CACHE_EXCLUSIVE = 4'b0010,
-        CACHE_MODIFIED  = 4'b0011,
+        HPDCACHE_INVALID   = 4'b0000,
+        HPDCACHE_SHARED    = 4'b0001,
+        HPDCACHE_EXCLUSIVE = 4'b0010,
+        HPDCACHE_MODIFIED  = 4'b0011,
 
         // Transient states
-        CACHE_ISD       = 4'b0100,
-        CACHE_SMA       = 4'b0101,
-        CACHE_MIA       = 4'b0110,
-        CACHE_EIA       = 4'b0111,
-        CACHE_SIA       = 4'b1000,
-        CACHE_IIA       = 4'b1001
+        HPDCACHE_ISD       = 4'b0100,
+        HPDCACHE_SMA       = 4'b0101,
+        HPDCACHE_MIA       = 4'b0110,
+        HPDCACHE_EIA       = 4'b0111,
+        HPDCACHE_SIA       = 4'b1000,
+        HPDCACHE_IIA       = 4'b1001
     } hpd_coherence_state_t;
+
+    typedef enum logic [1:0] {
+        INV       = 2'b00,
+        GET       = 2'b01,
+        INV_ACK   = 2'b10,
+        GET_ACK   = 2'b11
+    } fwd_msg_type_t;
 
     function automatic hpdcache_mem_size_t get_hpdcache_mem_size(int unsigned bytes);
         if      (bytes ==   0) return 0;

@@ -27,6 +27,7 @@
 
 module hpdcache
 import hpdcache_pkg::*;
+// import coherence_pkg::*;
     //  Parameters
     //  {{{
 #(
@@ -60,6 +61,9 @@ import hpdcache_pkg::*;
     parameter type hpdcache_mem_resp_w_t = logic,
     //  }}}
 
+    // Coherence type parameters
+    parameter type cache_dir_fwd_t = logic,
+
     localparam type hpdcache_nline_t = logic [HPDcacheCfg.nlineWidth-1:0]
 )
     //  }}}
@@ -87,6 +91,12 @@ import hpdcache_pkg::*;
     //      Core response interface
     output logic                          core_rsp_valid_o [HPDcacheCfg.u.nRequesters],
     output hpdcache_rsp_t                 core_rsp_o       [HPDcacheCfg.u.nRequesters],
+
+    // Coherence extension interface
+    input   cache_dir_fwd_t               fwd_rx_i,
+    input   logic                         fwd_rx_valid_i,
+    output  cache_dir_fwd_t               fwd_tx_o,
+    output  logic                         fwd_tx_valid_o,
 
     //      Read / Invalidation memory interface
     input  logic                          mem_req_read_ready_i,
@@ -500,7 +510,8 @@ import hpdcache_pkg::*;
         .hpdcache_req_be_t                  (hpdcache_req_be_t),
         .hpdcache_req_t                     (hpdcache_req_t),
         .hpdcache_rsp_t                     (hpdcache_rsp_t),
-        .hpdcache_dir_addr_t                (hpdcache_dir_addr_t)
+        .hpdcache_dir_addr_t                (hpdcache_dir_addr_t),
+        .cache_dir_fwd_t                    (cache_dir_fwd_t)
     ) hpdcache_ctrl_i(
         .clk_i,
         .rst_ni,
@@ -514,6 +525,11 @@ import hpdcache_pkg::*;
 
         .core_rsp_valid_o                   (core_rsp_valid),
         .core_rsp_o                         (core_rsp),
+
+        .fwd_rx_i                           (fwd_rx_i),
+        .fwd_rx_valid_i                     (fwd_rx_valid_i),
+        .fwd_tx_o                           (fwd_tx_o),
+        .fwd_tx_valid_o                     (fwd_tx_valid_o),
 
         .wbuf_flush_i,
 

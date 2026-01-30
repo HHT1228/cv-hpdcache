@@ -28,6 +28,7 @@ module hpdcache_ctrl
     // Package imports
     // {{{
 import hpdcache_pkg::*;
+// import coherence_pkg::*;
     // }}}
 
     // Parameters
@@ -63,7 +64,8 @@ import hpdcache_pkg::*;
     parameter type hpdcache_rsp_t = logic,
 
     // Coherence support parameters
-    parameter type hpdcache_dir_addr_t = logic
+    parameter type hpdcache_dir_addr_t = logic,
+    parameter type cache_dir_fwd_t = logic
 )
     // }}}
 
@@ -84,6 +86,12 @@ import hpdcache_pkg::*;
     //      Core response interface
     output logic                  core_rsp_valid_o,
     output hpdcache_rsp_t         core_rsp_o,
+
+    // Coherence extension interface
+    input   cache_dir_fwd_t       fwd_rx_i,
+    input   logic                 fwd_rx_valid_i,
+    output  cache_dir_fwd_t       fwd_tx_o,
+    output  logic                 fwd_tx_valid_o,
 
     //      Force the write buffer to send all pending writes
     input  logic                  wbuf_flush_i,
@@ -756,157 +764,198 @@ import hpdcache_pkg::*;
     // TODO: coherence op decode
     // TODO: sync CACHE_INVALID with invalid bit
     // Coherence support logic
+
+    // OP decode
+    always_comb begin : coherence_op_decode
+        if (core_req_valid_i) begin
+            unique case (core_req_i.op)
+                HPDCACHE_REQ_LOAD: begin
+                    coherence_op = OP_READ;
+                end
+                HPDCACHE_REQ_STORE: begin
+                    coherence_op = OP_WRITE;
+                end
+                HPDCACHE_REQ_CMO_INVAL_NLINE: begin
+                    coherence_op = OP_INV;
+                end
+                default: begin
+                    coherence_op = OP_NONE;
+                end
+            endcase
+        end else if (fwd_rx_valid_i) begin
+            unique case (fwd_rx_i.fwd_msg_type)
+                INV: begin
+                    coherence_op = OP_INV;          // Might be redundant
+                end
+                GET: begin
+                    coherence_op = OP_GET;
+                end
+                INV_ACK: begin
+                    coherence_op = OP_INV_ACK;
+                end
+                default: begin
+                    coherence_op = OP_NONE;
+                end
+            endcase
+        // end else if () begin
+            
+        end else begin
+            coherence_op = OP_NONE;
+        end
+    end
+
+    // Coherence state FSM
     always_comb begin : coherence_logic
         // Default: hold
         coherence_state_d = coherence_state_q;
         coherence_act = '0;
 
         unique case (coherence_state_q)
-            CACHE_INVALID: begin
+            HPDCACHE_INVALID: begin
                 unique case(coherence_op)
                     OP_READ: begin
                         coherence_act.send_to_dir       = 1'b1;
                         coherence_act.hit               = 1'b0;
                         coherence_act.stall             = 1'b0;
                         coherence_act.update_line_state = 1'b1;
-                        coherence_state_d               = CACHE_ISD;
+                        coherence_state_d               = HPDCACHE_ISD;
                     end
                     OP_WRITE: begin
                         coherence_act.send_to_dir       = 1'b1;
                         coherence_act.hit               = 1'b0;
                         coherence_act.stall             = 1'b0;
                         coherence_act.update_line_state = 1'b1;
-                        coherence_state_d               = CACHE_INVALID;
+                        coherence_state_d               = HPDCACHE_INVALID;
                     end
                     default: ;
                 endcase
             end
-            CACHE_SHARED: begin
+            HPDCACHE_SHARED: begin
                 unique case(coherence_op)
                     OP_READ: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b1;
                         coherence_act.stall             = 1'b0;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_SHARED;
+                        coherence_state_d               = HPDCACHE_SHARED;
                     end
                     OP_WRITE: begin
                         coherence_act.send_to_dir       = 1'b1;
                         coherence_act.hit               = 1'b0;
                         coherence_act.stall             = 1'b0;
                         coherence_act.update_line_state = 1'b1;
-                        coherence_state_d               = CACHE_SMA;
+                        coherence_state_d               = HPDCACHE_SMA;
                     end
                     default: ;
                 endcase
             end
-            CACHE_EXCLUSIVE: begin
+            HPDCACHE_EXCLUSIVE: begin
                 unique case(coherence_op)
                     OP_READ: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b1;
                         coherence_act.stall             = 1'b0;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_EXCLUSIVE;
+                        coherence_state_d               = HPDCACHE_EXCLUSIVE;
                     end
                     OP_WRITE: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b1;
                         coherence_act.stall             = 1'b0;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_MODIFIED;
+                        coherence_state_d               = HPDCACHE_MODIFIED;
                     end
                     default: ;
                 endcase
             end
-            CACHE_MODIFIED: begin
+            HPDCACHE_MODIFIED: begin
                 unique case(coherence_op)
                     OP_READ, OP_WRITE: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b1;
                         coherence_act.stall             = 1'b0;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_MODIFIED;
+                        coherence_state_d               = HPDCACHE_MODIFIED;
                     end
                     default: ;
                 endcase
             end
 
-            CACHE_ISD: begin
+            HPDCACHE_ISD: begin
                 unique case(coherence_op)
                     OP_READ, OP_WRITE, OP_EVICT, OP_INV: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b0;
                         coherence_act.stall             = 1'b1;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_ISD;
+                        coherence_state_d               = HPDCACHE_ISD;
                     end
                     default: ;
                 endcase
             end
-            CACHE_SMA: begin
+            HPDCACHE_SMA: begin
                 unique case(coherence_op)
                     OP_READ: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b1;
                         coherence_act.stall             = 1'b0;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_SMA;
+                        coherence_state_d               = HPDCACHE_SMA;
                     end
                     OP_WRITE, OP_EVICT: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b0;
                         coherence_act.stall             = 1'b1;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_SMA;
+                        coherence_state_d               = HPDCACHE_SMA;
                     end
                     default: ;
                 endcase
             end
-            CACHE_MIA: begin
+            HPDCACHE_MIA: begin
                 unique case(coherence_op)
                     OP_READ, OP_WRITE, OP_EVICT: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b0;
                         coherence_act.stall             = 1'b1;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_MIA;
+                        coherence_state_d               = HPDCACHE_MIA;
                     end
                     default: ;
                 endcase
             end
-            CACHE_EIA: begin
+            HPDCACHE_EIA: begin
                 unique case(coherence_op)
                     OP_READ, OP_WRITE, OP_EVICT: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b0;
                         coherence_act.stall             = 1'b1;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_EIA;
+                        coherence_state_d               = HPDCACHE_EIA;
                     end
                     default: ;
                 endcase
             end
-            CACHE_SIA: begin
+            HPDCACHE_SIA: begin
                 unique case(coherence_op)
                     OP_READ, OP_WRITE, OP_EVICT: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b0;
                         coherence_act.stall             = 1'b1;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_SIA;
+                        coherence_state_d               = HPDCACHE_SIA;
                     end
                     default: ;
                 endcase
             end
-            CACHE_IIA: begin
+            HPDCACHE_IIA: begin
                 unique case(coherence_op)
                     OP_READ, OP_WRITE, OP_EVICT: begin
                         coherence_act.send_to_dir       = 1'b0;
                         coherence_act.hit               = 1'b0;
                         coherence_act.stall             = 1'b1;
                         coherence_act.update_line_state = 1'b0;
-                        coherence_state_d               = CACHE_IIA;
+                        coherence_state_d               = HPDCACHE_IIA;
                     end
                     default: ;
                 endcase
@@ -917,7 +966,7 @@ import hpdcache_pkg::*;
     
     always_ff @(posedge clk_i or negedge rst_ni) begin : coherence_state_ff
         if (!rst_ni) begin
-            coherence_state_q <= CACHE_INVALID;
+            coherence_state_q <= HPDCACHE_INVALID;
         end else if (read_dir_coherence_gnt) begin
             coherence_state_q <= read_dir_coherence_rdata_o.coherence_state;
         end else begin
