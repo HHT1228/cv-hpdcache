@@ -180,6 +180,8 @@ import hpdcache_pkg::*;
     input  logic                                read_dir_coherence_i,
     input  hpdcache_dir_addr_t                  read_dir_coherence_set_i,
     input  hpdcache_tag_t                       read_dir_coherence_tag_i,
+    input  logic                                write_dir_coherence_i,
+    input  hpdcache_dir_entry_t                 write_dir_coherence_wdata_i,
     output hpdcache_dir_entry_t                 read_dir_coherence_rdata_o,
     output logic                                coherence_dir_bank_gnt_o
 );
@@ -682,22 +684,24 @@ import hpdcache_pkg::*;
     hpdcache_tag_t [HPDcacheCfg.u.ways-1:0] coherence_dir_tags;
     // hpdcache_way_vector_t coherence_dir_hit_way;
     logic coherence_curr_line_hit;
+    logic [$clog2(HPDcacheCfg.u.ways)-1:0] way_id;
 
     always_comb begin
         coherence_curr_line_hit = 1'b0;
+        way_id = '0;
         // coherence_dir_hit_way = '0;
 
         for (int i = 0; i < int'(HPDcacheCfg.u.ways); i++) begin
             hpdcache_tag_t local_tag;
             local_tag = dir_rentry[i].tag;
 
-            // TODO: outrule '0 tag
             if (!coherence_curr_line_hit && 
                 (local_tag == read_dir_coherence_tag_q) &&
                 (read_dir_coherence_tag_q != '0)) begin
                 coherence_curr_line_hit = 1'b1;
                 // coherence_dir_hit_way[i] = 1'b1;
                 coherence_rentry = dir_rentry[i];
+                way_id = hpdcache_uint' (i);
             end
         end
     end
