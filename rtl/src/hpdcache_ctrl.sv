@@ -65,7 +65,9 @@ import hpdcache_pkg::*;
 
     // Coherence support parameters
     parameter type hpdcache_dir_addr_t = logic,
-    parameter type cache_dir_fwd_t = logic
+    parameter type cache_dir_fwd_t = logic,
+    parameter type inv_ack_cnt_t = logic,
+    parameter type hpdcache_coherence_rsp_t = logic
 )
     // }}}
 
@@ -92,6 +94,8 @@ import hpdcache_pkg::*;
     input   logic                 fwd_rx_valid_i,
     output  cache_dir_fwd_t       fwd_tx_o,
     output  logic                 fwd_tx_valid_o,
+    input  hpdcache_coherence_rsp_t     coherence_rsp_i,
+    input  logic                        coherence_rsp_valid_i,
 
     //      Force the write buffer to send all pending writes
     input  logic                  wbuf_flush_i,
@@ -318,6 +322,12 @@ import hpdcache_pkg::*;
         OP_LAST_INV_ACK       = 4'd10
     } coherence_op_t;
 
+    typedef struct packed {
+        hpdcache_req_sid_t      sid;
+        hpdcache_req_tid_t      tid;
+        inv_ack_cnt_t           ack_count;
+    } hpdcache_inv_meta_t;
+
     //  Definition of internal registers
     //  {{{
     logic                    st1_req_valid_q, st1_req_valid_d;
@@ -465,7 +475,10 @@ import hpdcache_pkg::*;
     hpd_coherence_state_t    coherence_state_q, coherence_state_d;
     coherence_actions_t      coherence_act;
     coherence_op_t           coherence_op;
+    coherence_op_t           coherence_op_req, coherence_op_rsp, coherence_op_fwd;
     logic                    read_dir_coherence_gnt;
+    inv_ack_cnt_t            inv_ack_cnt;
+    hpdcache_inv_meta_t      inv_req_meta, inv_req_meta_q, inv_req_meta_d;
 
     //  Decoding of the request in stage 0
     //  {{{
@@ -761,27 +774,21 @@ import hpdcache_pkg::*;
 
     //  }}}
 
-    // TODO: coherence op decode
     // TODO: sync CACHE_INVALID with invalid bit
     // Coherence support logic
 
     // OP decode
-    always_comb begin : coherence_op_decode
-        if (core_req_valid_i) begin
-            unique case (core_req_i.op)
-                HPDCACHE_REQ_LOAD: begin
-                    coherence_op = OP_READ;
-                end
-                HPDCACHE_REQ_STORE: begin
-                    coherence_op = OP_WRITE;
-                end
-                HPDCACHE_REQ_CMO_INVAL_NLINE: begin
-                    coherence_op = OP_INV;
-                end
-                default: begin
-                    coherence_op = OP_NONE;
-                end
-            endcase
+    // TODO: buffer pending request on conflict
+    always_comb begin : coherence_req_op_decode
+        if (coherence_rsp_valid_i) begin
+            if (!coherence_rsp_i.is_inv_ack_cnt) begin
+                coherence_op = OP_EVICT_ACK;
+            end else begin
+                // TODO: hold using FF
+                inv_req_meta.sid        = coherence_rsp_i.sid;
+                inv_req_meta.tid        = coherence_rsp_i.tid;
+                inv_req_meta.ack_count  = coherence_rsp_i.inv_ack_cnt;
+            end
         end else if (fwd_rx_valid_i) begin
             unique case (fwd_rx_i.fwd_msg_type)
                 INV: begin
@@ -797,8 +804,21 @@ import hpdcache_pkg::*;
                     coherence_op = OP_NONE;
                 end
             endcase
-        // end else if () begin
-            
+        end else if (core_req_valid_i) begin
+            unique case (core_req_i.op)
+                HPDCACHE_REQ_LOAD: begin
+                    coherence_op = OP_READ;
+                end
+                HPDCACHE_REQ_STORE: begin
+                    coherence_op = OP_WRITE;
+                end
+                HPDCACHE_REQ_CMO_INVAL_NLINE: begin
+                    coherence_op = OP_INV;
+                end
+                default: begin
+                    coherence_op = OP_NONE;
+                end
+            endcase
         end else begin
             coherence_op = OP_NONE;
         end
