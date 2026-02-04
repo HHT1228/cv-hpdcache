@@ -173,7 +173,8 @@ import hpdcache_pkg::*;
     //  {{{
     typedef struct packed {
         // CACHE_INVALID should be sync with valid bit
-        hpd_coherence_state_t coherence_state;
+        hpd_coherence_state_t   coherence_state;
+        inv_ack_cnt_t           num_pending_inv_acks;
 
         //  Cacheline state
         //  Encoding: {valid, wb, dirty, fetch}
