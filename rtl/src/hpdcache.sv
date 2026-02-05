@@ -99,11 +99,15 @@ import hpdcache_pkg::*;
     // Coherence extension interface
     input   cache_dir_fwd_t               fwd_rx_i,
     input   logic                         fwd_rx_valid_i,
+    output  logic                         fwd_rx_ready_o,
+    
     output  cache_dir_fwd_t               fwd_tx_o,
     output  logic                         fwd_tx_valid_o,
     input   logic                         fwd_tx_ready_i,
+    
     input   hpdcache_coherence_rsp_t      coherence_rsp_i,
     input   logic                         coherence_rsp_valid_i,
+    output  logic                         coherence_rsp_ready_o,
     // output  hpdcache_coherence_req_t      coherence_req_o,
     // output  logic                         coherence_req_valid_o,
     output  hpdcache_coherence_evict_t    coherence_evict_o,
@@ -544,11 +548,13 @@ import hpdcache_pkg::*;
 
         .fwd_rx_i                           (fwd_rx_i),
         .fwd_rx_valid_i                     (fwd_rx_valid_i),
+        .fwd_rx_ready_o                     (fwd_rx_ready_o),
         .fwd_tx_o                           (fwd_tx_o),
         .fwd_tx_valid_o                     (fwd_tx_valid_o),
         .fwd_tx_ready_i                     (fwd_tx_ready_i),
         .coherence_rsp_i                    (coherence_rsp_i),
         .coherence_rsp_valid_i              (coherence_rsp_valid_i),
+        .coherence_rsp_ready_o              (coherence_rsp_ready_o),
         // .coherence_req_o                    (coherence_req_o),
         // .coherence_req_valid_o              (coherence_req_valid_o),
         .coherence_evict_o                  (coherence_evict_o),

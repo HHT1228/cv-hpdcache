@@ -94,12 +94,13 @@ import hpdcache_pkg::*;
     // Coherence extension interface
     input   cache_dir_fwd_t             fwd_rx_i,
     input   logic                       fwd_rx_valid_i,
+    output  logic                       fwd_rx_ready_o,
     output  cache_dir_fwd_t             fwd_tx_o,
     output  logic                       fwd_tx_valid_o,
     input   logic                       fwd_tx_ready_i,
     input   hpdcache_coherence_rsp_t    coherence_rsp_i,
     input   logic                       coherence_rsp_valid_i,
-    // TODO: rsp ready handshake (!busy)
+    output  logic                       coherence_rsp_ready_o,
     // output  hpdcache_coherence_req_t     coherence_req_o,
     // output  logic                        coherence_req_valid_o,
     output  hpdcache_coherence_evict_t  coherence_evict_o,
@@ -518,6 +519,7 @@ import hpdcache_pkg::*;
     logic                      fwd_tx_valid_d, fwd_tx_valid_q;
 
     logic op_decoded;
+    logic coherence_busy, coherence_busy_q, coherence_busy_d;
 
     //  Decoding of the request in stage 0
     //  {{{
@@ -814,7 +816,43 @@ import hpdcache_pkg::*;
     //  }}}
 
     // TODO: sync CACHE_INVALID with invalid bit
-    // Coherence support logic
+
+    /*************************
+    * COHERENCE SUPPORT LOGIC
+    *************************/
+
+    always_comb begin
+        coherence_busy_d = coherence_busy_q;
+        if (write_dir_coherence || fwd_tx_valid_o || coherence_evict_o.valid) begin
+            coherence_busy_d = coherence_act.stall ? 1'b1 : 1'b0;
+        end else if (core_req_valid_i || fwd_rx_valid_i || coherence_rsp_valid_i) begin
+            coherence_busy_d = 1'b1;
+        end
+    end
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            coherence_busy_q <= 1'b0;
+        end else begin
+            coherence_busy_q <= coherence_busy_d;
+        end
+    end
+
+    assign coherence_busy = coherence_busy_q;
+
+    always_comb begin : coherence_ready
+        fwd_rx_ready_o              = 1'b0;
+        coherence_rsp_ready_o       = 1'b0;
+
+        // Fwd is sink with higher priority than req
+        if (!coherence_busy) begin
+            if (fwd_rx_valid_i) begin
+                fwd_rx_ready_o              = 1'b1;
+            end else if (coherence_rsp_valid_i) begin
+                coherence_rsp_ready_o       = 1'b1;
+            end
+        end
+    end
 
     // Latch meta data for coherence processing
     always_ff @(posedge clk_i or negedge rst_ni) begin
