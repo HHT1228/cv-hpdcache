@@ -65,8 +65,9 @@ import hpdcache_pkg::*;
     parameter type cache_dir_fwd_t = logic,
     parameter type inv_ack_cnt_t = logic,
     parameter type hpdcache_coherence_rsp_t = logic,
-    parameter type hpdcache_coherence_req_t = logic,
-
+    // parameter type hpdcache_coherence_req_t = logic,
+    parameter type hpdcache_coherence_evict_t = logic,
+    
     localparam type hpdcache_nline_t = logic [HPDcacheCfg.nlineWidth-1:0]
 )
     //  }}}
@@ -100,10 +101,13 @@ import hpdcache_pkg::*;
     input   logic                         fwd_rx_valid_i,
     output  cache_dir_fwd_t               fwd_tx_o,
     output  logic                         fwd_tx_valid_o,
+    input   logic                         fwd_tx_ready_i,
     input   hpdcache_coherence_rsp_t      coherence_rsp_i,
     input   logic                         coherence_rsp_valid_i,
-    output  hpdcache_coherence_req_t      coherence_req_o,
-    output  logic                         coherence_req_valid_o,
+    // output  hpdcache_coherence_req_t      coherence_req_o,
+    // output  logic                         coherence_req_valid_o,
+    output  hpdcache_coherence_evict_t    coherence_evict_o,
+    input   logic                         coherence_evict_ready_i,
 
     //      Read / Invalidation memory interface
     input  logic                          mem_req_read_ready_i,
@@ -522,7 +526,8 @@ import hpdcache_pkg::*;
         .cache_dir_fwd_t                    (cache_dir_fwd_t),
         .inv_ack_cnt_t                      (inv_ack_cnt_t),
         .hpdcache_coherence_rsp_t           (hpdcache_coherence_rsp_t),
-        .hpdcache_coherence_req_t           (hpdcache_coherence_req_t)
+        // .hpdcache_coherence_req_t           (hpdcache_coherence_req_t)
+        .hpdcache_coherence_evict_t         (hpdcache_coherence_evict_t)
     ) hpdcache_ctrl_i(
         .clk_i,
         .rst_ni,
@@ -541,10 +546,13 @@ import hpdcache_pkg::*;
         .fwd_rx_valid_i                     (fwd_rx_valid_i),
         .fwd_tx_o                           (fwd_tx_o),
         .fwd_tx_valid_o                     (fwd_tx_valid_o),
+        .fwd_tx_ready_i                     (fwd_tx_ready_i),
         .coherence_rsp_i                    (coherence_rsp_i),
         .coherence_rsp_valid_i              (coherence_rsp_valid_i),
-        .coherence_req_o                    (coherence_req_o),
-        .coherence_req_valid_o              (coherence_req_valid_o),
+        // .coherence_req_o                    (coherence_req_o),
+        // .coherence_req_valid_o              (coherence_req_valid_o),
+        .coherence_evict_o                  (coherence_evict_o),
+        .coherence_evict_ready_i            (coherence_evict_ready_i),
 
         .wbuf_flush_i,
 

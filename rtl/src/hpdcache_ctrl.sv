@@ -68,7 +68,8 @@ import hpdcache_pkg::*;
     parameter type cache_dir_fwd_t = logic,
     parameter type inv_ack_cnt_t = logic,
     parameter type hpdcache_coherence_rsp_t = logic,
-    parameter type hpdcache_coherence_req_t = logic
+    // parameter type hpdcache_coherence_req_t = logic,
+    parameter type hpdcache_coherence_evict_t = logic
 )
     // }}}
 
@@ -91,17 +92,20 @@ import hpdcache_pkg::*;
     output hpdcache_rsp_t         core_rsp_o,
 
     // Coherence extension interface
-    input   cache_dir_fwd_t       fwd_rx_i,
-    input   logic                 fwd_rx_valid_i,
-    output  cache_dir_fwd_t       fwd_tx_o,
-    output  logic                 fwd_tx_valid_o,
-    input   hpdcache_coherence_rsp_t     coherence_rsp_i,
-    input   logic                        coherence_rsp_valid_i,
-    output  hpdcache_coherence_req_t     coherence_req_o,
-    output  logic                        coherence_req_valid_o,
-
+    input   cache_dir_fwd_t             fwd_rx_i,
+    input   logic                       fwd_rx_valid_i,
+    output  cache_dir_fwd_t             fwd_tx_o,
+    output  logic                       fwd_tx_valid_o,
+    input   logic                       fwd_tx_ready_i,
+    input   hpdcache_coherence_rsp_t    coherence_rsp_i,
+    input   logic                       coherence_rsp_valid_i,
+    // TODO: rsp ready handshake (!busy)
+    // output  hpdcache_coherence_req_t     coherence_req_o,
+    // output  logic                        coherence_req_valid_o,
+    output  hpdcache_coherence_evict_t  coherence_evict_o,
+    input   logic                       coherence_evict_ready_i,
     //      Force the write buffer to send all pending writes
-    input  logic                  wbuf_flush_i,
+    input  logic                        wbuf_flush_i,
 
     //      Global control signals
     output logic                  cachedir_hit_o,
@@ -508,6 +512,10 @@ import hpdcache_pkg::*;
     hpdcache_dir_addr_t    write_dir_coherence_set;
     hpdcache_way_vector_t  write_dir_coherence_way, write_dir_coherence_way_q, write_dir_coherence_way_d;
     logic [$clog2(HPDcacheCfg.u.ways)-1:0] coherence_rway, coherence_rway_d, coherence_rway_q;
+
+    hpdcache_coherence_evict_t coherence_evict_d, coherence_evict_q;
+    cache_dir_fwd_t            fwd_tx_d, fwd_tx_q;
+    logic                      fwd_tx_valid_d, fwd_tx_valid_q;
 
     logic op_decoded;
 
@@ -980,51 +988,114 @@ import hpdcache_pkg::*;
     // assign pending_inv_acks_d = pending_inv_acks_q;
 
     // Action handling
+    // always_comb begin : hpd_act_fwd_tx
+    //     if (coherence_act.send_inv_ack) begin
+    //         fwd_tx_valid_o          = 1'b1;
+    //         // fwd_tx_o.addr           = {core_req_tag_q, core_req_q.addr_offset};
+    //         fwd_tx_o.addr           = {core_req_tag_d, core_req_d.addr_offset};
+    //         fwd_tx_o.fwd_msg_type   = INV_ACK;
+    //         fwd_tx_o.line_state     = next_coherence_state;
+    //         // fwd_tx_o.sid            = coherence_sid;
+    //         // fwd_tx_o.tid            = coherence_tid;
+    //     end else if (coherence_act.send_get_ack) begin
+    //         fwd_tx_valid_o          = 1'b1;
+    //         // fwd_tx_o.addr           = {core_req_tag_q, core_req_q.addr_offset};
+    //         fwd_tx_o.addr           = {core_req_tag_d, core_req_d.addr_offset};
+    //         fwd_tx_o.fwd_msg_type   = GET_ACK;
+    //         fwd_tx_o.line_state     = next_coherence_state;
+    //         // fwd_tx_o.sid            = coherence_sid;
+    //         // fwd_tx_o.tid            = coherence_tid;
+    //     end else begin
+    //         fwd_tx_valid_o          = 1'b0;
+    //         fwd_tx_o                = '0;
+    //         // fwd_tx_o.sid            = '0;
+    //         // fwd_tx_o.tid            = '0;
+    //     end
+    // end
+
     always_comb begin : hpd_act_fwd_tx
+        fwd_tx_valid_d          = fwd_tx_valid_q;
+        fwd_tx_d                = fwd_tx_q;
+
         if (coherence_act.send_inv_ack) begin
-            fwd_tx_valid_o          = 1'b1;
-            // fwd_tx_o.addr           = {core_req_tag_q, core_req_q.addr_offset};
-            fwd_tx_o.addr           = {core_req_tag_d, core_req_d.addr_offset};
-            fwd_tx_o.fwd_msg_type   = INV_ACK;
-            fwd_tx_o.line_state     = next_coherence_state;
-            // fwd_tx_o.sid            = coherence_sid;
-            // fwd_tx_o.tid            = coherence_tid;
+            fwd_tx_valid_d          = 1'b1;
+            fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
+            fwd_tx_d.fwd_msg_type   = INV_ACK;
+            fwd_tx_d.line_state     = next_coherence_state;
         end else if (coherence_act.send_get_ack) begin
-            fwd_tx_valid_o          = 1'b1;
-            // fwd_tx_o.addr           = {core_req_tag_q, core_req_q.addr_offset};
-            fwd_tx_o.addr           = {core_req_tag_d, core_req_d.addr_offset};
-            fwd_tx_o.fwd_msg_type   = GET_ACK;
-            fwd_tx_o.line_state     = next_coherence_state;
-            // fwd_tx_o.sid            = coherence_sid;
-            // fwd_tx_o.tid            = coherence_tid;
-        end else begin
-            fwd_tx_valid_o          = 1'b0;
-            fwd_tx_o                = '0;
-            // fwd_tx_o.sid            = '0;
-            // fwd_tx_o.tid            = '0;
+            fwd_tx_valid_d          = 1'b1;
+            fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
+            fwd_tx_d.fwd_msg_type   = GET_ACK;
+            fwd_tx_d.line_state     = next_coherence_state;
         end
     end
 
-    always_comb begin : hpd_act_req
-        if (coherence_act.send_evict) begin
-            coherence_req_valid_o       = 1'b1;
-            coherence_req_o.req_type    = EVICT;
-            coherence_req_o.sid         = st1_req_q.sid;    // TODO: check this and below
-            coherence_req_o.tid         = st1_req_q.tid;
-        // end else if (core_req_i.op == HPDCACHE_REQ_LOAD) begin
-        //     // Inform L2 on a separate network
-        //     coherence_req_valid_o       = 1'b1;
-        //     coherence_req_o.req_type    = READ;
-        //     coherence_req_o.sid         = core_req_i.sid;
-        //     coherence_req_o.tid         = core_req_i.tid;
-        // end else if (core_req_i.op == HPDCACHE_REQ_STORE) begin
-        //     coherence_req_valid_o       = 1'b1;
-        //     coherence_req_o.req_type    = WRITE;
-        //     coherence_req_o.sid         = core_req_i.sid;
-        //     coherence_req_o.tid         = core_req_i.tid;
+    assign fwd_tx_valid_o = fwd_tx_valid_d;
+    assign fwd_tx_o       = fwd_tx_d;
+
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin : hpd_act_fwd_tx_ff
+        if (!rst_ni) begin
+            fwd_tx_valid_q <= 1'b0;
+            fwd_tx_q       <= '0;
+        end else if (fwd_tx_valid_o && fwd_tx_ready_i) begin
+            fwd_tx_valid_q <= 1'b0;
+            fwd_tx_q       <= '0;
         end else begin
-            coherence_req_valid_o       = 1'b0;
-            coherence_req_o             = '0;
+            fwd_tx_valid_q <= fwd_tx_valid_d;
+            fwd_tx_q       <= fwd_tx_d;
+        end 
+    end
+    // always_comb begin : hpd_act_req
+    //     if (coherence_act.send_evict) begin
+    //         coherence_req_valid_o       = 1'b1;
+    //         coherence_req_o.req_type    = EVICT;
+    //         coherence_req_o.sid         = st1_req_q.sid;
+    //         coherence_req_o.tid         = st1_req_q.tid;
+    //     end else if (core_req_i.op == HPDCACHE_REQ_LOAD) begin
+    //         // Inform L2 on a separate network
+    //         coherence_req_valid_o       = 1'b1;
+    //         coherence_req_o.req_type    = READ;
+    //         coherence_req_o.sid         = core_req_i.sid;
+    //         coherence_req_o.tid         = core_req_i.tid;
+    //     end else if (core_req_i.op == HPDCACHE_REQ_STORE) begin
+    //         coherence_req_valid_o       = 1'b1;
+    //         coherence_req_o.req_type    = WRITE;
+    //         coherence_req_o.sid         = core_req_i.sid;
+    //         coherence_req_o.tid         = core_req_i.tid;
+    //     end else begin
+    //         coherence_req_valid_o       = 1'b0;
+    //         coherence_req_o             = '0;
+    //     end
+    // end
+
+    // always_comb begin : hpd_act_evict
+    //     coherence_evict_o = '0;
+
+    //     if (coherence_act.send_evict) begin
+    //         coherence_evict_o.valid       = 1'b1;
+    //         coherence_evict_o.addr_tag    = st1_dir_victim_tag;
+    //     end
+    // end
+
+    always_comb begin : hpd_act_evict
+        coherence_evict_d = coherence_evict_q;
+
+        if (coherence_act.send_evict) begin
+            coherence_evict_d.valid       = 1'b1;
+            coherence_evict_d.addr_tag    = st1_dir_victim_tag;                     // TODO: check
+        end
+    end
+
+    assign coherence_evict_o = coherence_evict_d;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin : hpd_act_evict_ff
+        if (!rst_ni) begin
+            coherence_evict_q <= '0;
+        end else if (coherence_evict_o.valid && coherence_evict_ready_i) begin
+            coherence_evict_q <= '0;
+        end else begin
+            coherence_evict_q <= coherence_evict_d;
         end
     end
 
