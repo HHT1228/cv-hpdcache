@@ -504,6 +504,7 @@ import hpdcache_pkg::*;
 
     hpdcache_ctrl #(
         .HPDcacheCfg                        (HPDcacheCfg),
+        .HPDCACHE_DIR_RAM_ADDR_WIDTH        (HPDCACHE_DIR_RAM_ADDR_WIDTH),
         .hpdcache_nline_t                   (hpdcache_nline_t),
         .hpdcache_tag_t                     (hpdcache_tag_t),
         .hpdcache_set_t                     (hpdcache_set_t),
@@ -731,12 +732,12 @@ import hpdcache_pkg::*;
         .evt_req_on_hold_o,
         .evt_rtab_rollback_o,
         .evt_stall_refill_o,
-        .evt_stall_o,
+        .evt_stall_o
 
-        .read_dir_coherence_i               (read_dir_coherence),
-        .read_dir_coherence_set_i           (read_dir_coherence_addr),
-        .read_dir_coherence_tag_i           (read_dir_coherence_tag),
-        .read_dir_coherence_rdata_o         (read_dir_coherence_rdata)
+        // .read_dir_coherence_i               (read_dir_coherence),
+        // .read_dir_coherence_set_i           (read_dir_coherence_addr),
+        // .read_dir_coherence_tag_i           (read_dir_coherence_tag),
+        // .read_dir_coherence_rdata_o         (read_dir_coherence_rdata)
     );
     //  }}}
 
