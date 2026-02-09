@@ -979,7 +979,8 @@ import hpdcache_pkg::*;
             op_decoded = 1'b1;
         
         end else if (refill_core_rsp_valid_i) begin
-            coherence_op = OP_DATA;
+            // coherence_op = OP_DATA;
+            coherence_op = refill_core_rsp_i.data_exclusive ? OP_EXC_DATA : OP_DATA; 
             op_decoded = 1'b1;
             // DO NOTHING
         // end else if (fwd_rx_valid_q && dir_coherence_gnt) begin

@@ -43,6 +43,7 @@
         __id_t                                mem_resp_r_id; \
         __data_t                              mem_resp_r_data; \
         logic                                 mem_resp_r_last; \
+        logic                                 data_exclusive;  \
     }
 
 `define HPDCACHE_DECL_MEM_REQ_W_T(__data_t, __be_t) \
@@ -112,6 +113,7 @@
         __tid_t  tid; \
         logic    error; \
         logic    aborted; \
+        logic    data_exclusive; \
     }
 
 `define HPDCACHE_TYPEDEF_RSP_T(__name__, __data_t, __sid_t, __tid_t) \

@@ -576,6 +576,8 @@ import hpdcache_pkg::*;
     assign refill_core_rsp.tid     = refill_core_rsp_tid;
     assign refill_core_rsp.error   = refill_core_rsp_error;
     assign refill_core_rsp.aborted = 1'b0;
+    
+    assign refill_core_rsp.data_exclusive = mem_resp_i.data_exclusive;  // Could be dangerous
 
     hpdcache_fifo_reg #(
         .FIFO_DEPTH  (1),
