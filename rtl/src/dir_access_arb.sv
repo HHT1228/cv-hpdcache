@@ -1,6 +1,6 @@
 // Author: Ho Tin Hung
 
-module dir_read_arb #(
+module dir_access_arb #(
   // parameter int unsigned NumTagBankPerCtrl = 2,
   parameter int unsigned NumWays = 4,
 
@@ -27,6 +27,7 @@ module dir_read_arb #(
   output hpdcache_way_vector_t                         dir_we_o,
   output hpdcache_dir_entry_t            [NumWays-1:0] dir_wentry_o,
 
+  // output logic                                         is_cache_access_o,
   output logic                                         comb_gnt_o,
   output logic                                         coherence_gnt_o
 );
@@ -35,7 +36,7 @@ module dir_read_arb #(
     hpdcache_dir_addr_t                           dir_addr;
     hpdcache_way_vector_t                         dir_cs;
     hpdcache_way_vector_t                         dir_we;
-    hpdcache_dir_entry_t [NumWays-1:0] dir_wentry;
+    hpdcache_dir_entry_t [NumWays-1:0]            dir_wentry;
   } dir_req_pack_t;
 
   dir_req_pack_t comb_req_pack, coherence_req_pack, final_req_pack;
@@ -79,6 +80,8 @@ module dir_read_arb #(
     .data_o  (final_req_pack),
     .idx_o   ()
   );
+
+  // assign is_cache_access_o = (final_req_pack.dir_cs != '0);
 
   // dir_req_pack_t comb_req_pack_push, comb_req_pack_pop;
   // logic latch_comb_req, serve_pend_req;

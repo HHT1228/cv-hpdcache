@@ -13,7 +13,7 @@ sources:
   # - rtl/src/ext_dep/fifo_v3.sv
   # - rtl/src/fifo.sv
   # - rtl/src/coherence_pkg.sv
-  - rtl/src/dir_read_arb.sv
+  - rtl/src/dir_access_arb.sv
   - rtl/src/common/macros/behav/hpdcache_sram_1rw.sv
   - rtl/src/common/macros/behav/hpdcache_sram_wbyteenable_1rw.sv
   - rtl/src/common/macros/behav/hpdcache_sram_wmask_1rw.sv

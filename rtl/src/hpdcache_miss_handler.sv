@@ -564,6 +564,7 @@ import hpdcache_pkg::*;
     assign refill_dir_entry_o = '{
         coherence_state: '0,                                  // TODO
         valid   : ~refill_is_error_o,
+        // valid   : !$isunknown(refill_tag_q),
         wback   : ~refill_is_error_o & refill_wback_q,
         dirty   : ~refill_is_error_o & refill_dirty_q,
         fetch   : 1'b0,
