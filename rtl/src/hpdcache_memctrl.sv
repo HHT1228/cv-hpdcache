@@ -236,6 +236,9 @@ import hpdcache_pkg::*;
           [HPDCACHE_DATA_RAM_Y_CUTS-1:0]
           [HPDCACHE_DATA_RAM_X_CUTS-1:0]
           hpdcache_data_addr_t;
+
+    // Coherence support types
+    typedef logic[HPDCACHE_DIR_RAM_WIDTH-1:0] hpdcache_dir_mask_t;
     //  }}}
 
     //  Definition of functions
@@ -370,14 +373,16 @@ import hpdcache_pkg::*;
     hpdcache_way_vector_t                         coherence_dir_cs, served_dir_cs;
     hpdcache_way_vector_t                         coherence_dir_we, served_dir_we;
     hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] coherence_dir_wentry, served_dir_wentry;
-    hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] dir_wmask;
+    hpdcache_dir_mask_t  [HPDcacheCfg.u.ways-1:0] dir_wmask;
 
-    logic                                      cache_dir_bank_gnt, coherence_dir_bank_gnt;
+    logic                                      cache_dir_bank_gnt, coherence_dir_bank_gnt, coherence_dir_bank_gnt_q;
 
     hpdcache_dir_addr_t                           dir_addr_q, dir_addr_d;
     hpdcache_way_vector_t                         dir_cs_q, dir_cs_d;
     hpdcache_way_vector_t                         dir_we_q, dir_we_d;
     hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] dir_wentry_q, dir_wentry_d;
+
+    `FF(coherence_dir_bank_gnt_q, coherence_dir_bank_gnt, 1'b0, clk_i, rst_ni)
 
     //  Init FSM
     //  {{{
@@ -459,7 +464,7 @@ import hpdcache_pkg::*;
                 .we        (served_dir_we[dir_w]),
                 .addr      (served_dir_addr),
                 .wdata     (served_dir_wentry[dir_w]),
-                .wmask     (dir_wmask[dir_w]),    // TODO
+                .wmask     (dir_wmask[dir_w]),
 `endif
                 .rdata     (dir_rentry[dir_w])
             );
@@ -587,8 +592,8 @@ import hpdcache_pkg::*;
 
                 for (hpdcache_uint i = 0; i < HPDcacheCfg.u.ways; i++) begin
                     dir_wentry[i] = '{
-                        coherence_state: '0,            // TODO
-                        num_pending_inv_acks: '0,      // TODO
+                        coherence_state: HPDCACHE_INVALID,
+                        num_pending_inv_acks: '0,
                         valid: dir_cmo_updt_valid_i,
                         wback: dir_cmo_updt_wback_i,
                         dirty: dir_cmo_updt_dirty_i,
@@ -606,8 +611,8 @@ import hpdcache_pkg::*;
 
                 for (hpdcache_uint i = 0; i < HPDcacheCfg.u.ways; i++) begin
                     dir_wentry[i] = '{
-                        coherence_state: '0,            // TODO
-                        num_pending_inv_acks: '0,      // TODO
+                        coherence_state: HPDCACHE_INVALID,
+                        num_pending_inv_acks: '0,
                         valid: dir_updt_valid_i,
                         wback: dir_updt_wback_i,
                         dirty: dir_updt_dirty_i,
@@ -803,10 +808,10 @@ import hpdcache_pkg::*;
         //     // Load
         //     read_dir_coherence_q      <= read_dir_coherence_i;
         //     read_dir_coherence_tag_q  <= read_dir_coherence_tag_i;
-        end else if (read_dir_coherence_q && coherence_dir_bank_gnt) begin
+        end else if (read_dir_coherence_d && coherence_dir_bank_gnt) begin
             // Clear after read is served
             read_dir_coherence_q      <= 1'b0;
-            read_dir_coherence_tag_q  <= '0;
+            read_dir_coherence_tag_q  <= read_dir_coherence_tag_d;
         end else begin
             // Hold
             read_dir_coherence_q      <= read_dir_coherence_d;
@@ -850,7 +855,8 @@ import hpdcache_pkg::*;
 
             if (!coherence_curr_line_hit && 
                 (local_tag == read_dir_coherence_tag_d) &&
-                (read_dir_coherence_tag_d != '0)) begin
+                (read_dir_coherence_tag_d != '0) &&
+                coherence_dir_bank_gnt_q) begin
                 coherence_curr_line_hit = 1'b1;
                 // coherence_dir_hit_way[i] = 1'b1;
                 coherence_rentry = dir_rentry[i];
@@ -860,7 +866,7 @@ import hpdcache_pkg::*;
     end
 
     assign way_id_o = way_id;
-    assign read_dir_coherence_rdata_o = read_dir_coherence_d ? coherence_rentry : '0;
+    assign read_dir_coherence_rdata_o = coherence_curr_line_hit ? coherence_rentry : '0;
 
     //  Directory hit logic
     //  {{{
