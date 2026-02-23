@@ -341,6 +341,8 @@ package hpdcache_pkg;
         EVICT   = 2'b10
     } coherence_req_type_t;
 
+    // typedef logic [NumCores-1:0] sharer_list_t;
+
     function automatic hpdcache_mem_size_t get_hpdcache_mem_size(int unsigned bytes);
         if      (bytes ==   0) return 0;
         else if (bytes <=   2) return 1;

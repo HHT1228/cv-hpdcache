@@ -63,6 +63,7 @@ import hpdcache_pkg::*;
 
     // Coherence type parameters
     parameter type cache_dir_fwd_t = logic,
+    parameter type sharer_list_t = logic,
     parameter type inv_ack_cnt_t = logic,
     parameter type hpdcache_coherence_rsp_t = logic,
     // parameter type hpdcache_coherence_req_t = logic,
@@ -529,6 +530,7 @@ import hpdcache_pkg::*;
         .hpdcache_rsp_t                     (hpdcache_rsp_t),
         .hpdcache_dir_addr_t                (hpdcache_dir_addr_t),
         .cache_dir_fwd_t                    (cache_dir_fwd_t),
+        .sharer_list_t                      (sharer_list_t),
         .inv_ack_cnt_t                      (inv_ack_cnt_t),
         .hpdcache_coherence_rsp_t           (hpdcache_coherence_rsp_t),
         // .hpdcache_coherence_req_t           (hpdcache_coherence_req_t)

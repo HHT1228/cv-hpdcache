@@ -68,6 +68,7 @@ import hpdcache_pkg::*;
     // Coherence support parameters
     parameter type hpdcache_dir_addr_t = logic,
     parameter type cache_dir_fwd_t = logic,
+    parameter type sharer_list_t = logic,
     parameter type inv_ack_cnt_t = logic,
     parameter type hpdcache_coherence_rsp_t = logic,
     // parameter type hpdcache_coherence_req_t = logic,
@@ -862,13 +863,13 @@ import hpdcache_pkg::*;
         coherence_rsp_ready_o       = 1'b0;
 
         // Fwd is sink with higher priority than req
-        if (!coherence_busy) begin
-            if (fwd_rx_valid_i) begin
-                fwd_rx_ready_o              = 1'b1;
-            end else if (coherence_rsp_valid_i) begin
-                coherence_rsp_ready_o       = 1'b1;
-            end
+        // if (!coherence_busy) begin
+        if (fwd_rx_valid_i) begin
+            fwd_rx_ready_o              = 1'b1;
+        end else if (coherence_rsp_valid_i) begin
+            coherence_rsp_ready_o       = 1'b1;
         end
+        // end
     end
 
     // Latch meta data for coherence processing
@@ -1005,7 +1006,6 @@ import hpdcache_pkg::*;
         
         // end else if (refill_core_rsp_valid_i) begin
         end else if (refill_core_rsp_valid_d && dir_coherence_gnt_q) begin
-            // FIXME: decode op when both refill entry and dir info are available. May need to hold refill entry
             // coherence_op = OP_DATA;
             // coherence_op = refill_core_rsp_i.data_exclusive ? OP_EXC_DATA : OP_DATA; 
             coherence_op = refill_core_rsp_d.data_exclusive ? OP_EXC_DATA : OP_DATA;
@@ -1106,11 +1106,13 @@ import hpdcache_pkg::*;
             fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
             fwd_tx_d.fwd_msg_type   = INV_ACK;
             fwd_tx_d.line_state     = next_coherence_state;
+            fwd_tx_d.new_owner      = fwd_rx_d.new_owner;
         end else if (coherence_act.send_get_ack) begin
             fwd_tx_valid_d          = 1'b1;
             fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
             fwd_tx_d.fwd_msg_type   = GET_ACK;
             fwd_tx_d.line_state     = next_coherence_state;
+            // fwd_tx_d.new_owner      = ;
         end
     end
 
@@ -1489,7 +1491,7 @@ import hpdcache_pkg::*;
             read_dir_coherence_tag_d = refill_dir_entry_i.tag;
         end else if (fwd_rx_valid_i) begin
             read_dir_coherence_d = 1'b1;
-            read_dir_coherence_set_d = fwd_rx_addr_tag[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
+            read_dir_coherence_set_d = fwd_rx_addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
             read_dir_coherence_tag_d = fwd_rx_addr_tag;
         end else if (core_req_valid_i) begin
             read_dir_coherence_d = 1'b1;
