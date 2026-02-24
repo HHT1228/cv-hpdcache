@@ -527,6 +527,7 @@ import hpdcache_pkg::*;
     logic coherence_busy, coherence_busy_q, coherence_busy_d;
 
     hpdcache_dir_entry_t   read_dir_coherence_rdata;
+    hpd_coherence_state_t current_state;
 
     `FF(coherence_act_q, coherence_act, '0, clk_i, rst_ni)
     `FF(next_coherence_state_q, next_coherence_state, HPDCACHE_INVALID, clk_i, rst_ni)
@@ -1111,7 +1112,8 @@ import hpdcache_pkg::*;
             fwd_tx_valid_d          = 1'b1;
             fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
             fwd_tx_d.fwd_msg_type   = GET_ACK;
-            fwd_tx_d.line_state     = next_coherence_state;
+            // fwd_tx_d.line_state     = next_coherence_state;
+            fwd_tx_d.line_state     = current_state;
             // fwd_tx_d.new_owner      = ;
         end
     end
@@ -1218,7 +1220,6 @@ import hpdcache_pkg::*;
     end
 
     // Coherence state FSM
-    hpd_coherence_state_t current_state;
     assign current_state = dir_coherence_gnt_q ? read_dir_coherence_rdata.coherence_state : coherence_state_q;
     always_comb begin : coherence_logic
         // Default: hold
