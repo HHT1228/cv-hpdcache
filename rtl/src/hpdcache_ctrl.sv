@@ -1108,12 +1108,14 @@ import hpdcache_pkg::*;
             fwd_tx_d.fwd_msg_type   = INV_ACK;
             fwd_tx_d.line_state     = next_coherence_state;
             fwd_tx_d.new_owner      = fwd_rx_d.new_owner;
+            fwd_tx_d.num_inv_ack    = 1;
         end else if (coherence_act.send_get_ack) begin
             fwd_tx_valid_d          = 1'b1;
             fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
             fwd_tx_d.fwd_msg_type   = GET_ACK;
             // fwd_tx_d.line_state     = next_coherence_state;
             fwd_tx_d.line_state     = current_state;
+            fwd_tx_d.num_inv_ack    = 0;
             // fwd_tx_d.new_owner      = ;
         end
     end
@@ -1241,6 +1243,13 @@ import hpdcache_pkg::*;
                     OP_WRITE: begin
                         coherence_act.send_to_dir       = 1'b1;
                         coherence_act.update_line_state = 1'b1;
+                        coherence_state_d               = HPDCACHE_INVALID;
+                    end
+                    OP_GET: begin
+                        coherence_act.send_to_dir       = 1'b1;
+                        coherence_act.send_get_ack      = 1'b1;
+                        // coherence_act.update_line_state = 1'b1;
+                        coherence_act.flush_wbuf        = 1'b1;
                         coherence_state_d               = HPDCACHE_INVALID;
                     end
                     default: ;
