@@ -1365,6 +1365,9 @@ import hpdcache_pkg::*;
                         coherence_act.update_line_state = 1'b1;
                         coherence_state_d               = HPDCACHE_INVALID;
                     end
+                    OP_INV_ACK_CNT: begin
+                        pending_inv_acks_d              = coherence_rsp_d.inv_ack_cnt;
+                    end
                     OP_INV_ACK: begin
                         if (pending_inv_acks_q == 1) begin
                             coherence_act.update_line_state = 1'b1;
