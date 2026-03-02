@@ -42,6 +42,7 @@ import hpdcache_pkg::*;
     //   {{{
     input  logic                   core_req_valid_i,
     output logic                   core_req_ready_o,
+    input  logic                   coherence_req_ready_i,
 
     input  logic                   rtab_req_valid_i,
     output logic                   rtab_req_ready_o,
@@ -1075,7 +1076,8 @@ import hpdcache_pkg::*;
                                & ~cmo_busy_i
                                & ~uc_busy_i
                                & ~rtab_fence_i
-                               & ~nop;
+                               & ~nop
+                               & coherence_req_ready_i;
 
             rtab_req_ready_o = rtab_req_valid_i
                                & ~refill_req_valid_i

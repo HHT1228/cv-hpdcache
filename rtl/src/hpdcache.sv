@@ -67,7 +67,7 @@ import hpdcache_pkg::*;
     parameter type inv_ack_cnt_t = logic,
     parameter type hpdcache_coherence_rsp_t = logic,
     // parameter type hpdcache_coherence_req_t = logic,
-    parameter type hpdcache_coherence_evict_t = logic,
+    parameter type coherence_evict_t = logic,
     
     localparam type hpdcache_nline_t = logic [HPDcacheCfg.nlineWidth-1:0]
 )
@@ -111,7 +111,7 @@ import hpdcache_pkg::*;
     output  logic                         coherence_rsp_ready_o,
     // output  hpdcache_coherence_req_t      coherence_req_o,
     // output  logic                         coherence_req_valid_o,
-    output  hpdcache_coherence_evict_t    coherence_evict_o,
+    output  coherence_evict_t    coherence_evict_o,
     input   logic                         coherence_evict_ready_i,
 
     //      Read / Invalidation memory interface
@@ -534,7 +534,7 @@ import hpdcache_pkg::*;
         .inv_ack_cnt_t                      (inv_ack_cnt_t),
         .hpdcache_coherence_rsp_t           (hpdcache_coherence_rsp_t),
         // .hpdcache_coherence_req_t           (hpdcache_coherence_req_t)
-        .hpdcache_coherence_evict_t         (hpdcache_coherence_evict_t)
+        .coherence_evict_t         (coherence_evict_t)
     ) hpdcache_ctrl_i(
         .clk_i,
         .rst_ni,
