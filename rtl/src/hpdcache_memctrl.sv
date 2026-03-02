@@ -187,6 +187,7 @@ import hpdcache_pkg::*;
     input  hpdcache_dir_entry_t                 write_dir_coherence_wdata_i,
     output hpdcache_dir_entry_t                 read_dir_coherence_rdata_o,
     output logic                                coherence_dir_bank_gnt_o,
+    output logic                                coherence_read_served_o,
     output logic [$clog2(HPDcacheCfg.u.ways)-1:0] way_id_o
 );
     //  }}}
@@ -769,7 +770,8 @@ import hpdcache_pkg::*;
         .dir_wentry_o(served_dir_wentry),
 
         .comb_gnt_o(cache_dir_bank_gnt),
-        .coherence_gnt_o(coherence_dir_bank_gnt)
+        .coherence_gnt_o(coherence_dir_bank_gnt),
+        .coherence_read_served_o(coherence_read_served_o)
     );
 
     assign coherence_dir_bank_gnt_o = coherence_dir_bank_gnt;

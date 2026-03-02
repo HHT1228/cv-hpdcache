@@ -29,7 +29,8 @@ module dir_access_arb #(
 
   // output logic                                         is_cache_access_o,
   output logic                                         comb_gnt_o,
-  output logic                                         coherence_gnt_o
+  output logic                                         coherence_gnt_o,
+  output logic                                         coherence_read_served_o
 );
 
   typedef struct packed {
@@ -52,7 +53,7 @@ module dir_access_arb #(
   assign coherence_req_pack.dir_cs      = coherence_dir_cs_i;
   assign coherence_req_pack.dir_we      = coherence_dir_we_i;
   assign coherence_req_pack.dir_wentry  = coherence_dir_wentry_i;
-
+  
   // assign req_pack_combined[0] = comb_req_pack;
   // assign req_pack_combined[1] = coherence_req_pack;
 
@@ -60,6 +61,8 @@ module dir_access_arb #(
   assign dir_cs_o     = final_req_pack.dir_cs;
   assign dir_we_o     = final_req_pack.dir_we;
   assign dir_wentry_o = final_req_pack.dir_wentry;
+
+  assign coherence_read_served_o = coherence_gnt_o && !final_req_pack.dir_we;
 
   // assign req_valid = (comb_dir_cs_i != '0) || coherence_req_i;
 
