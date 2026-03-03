@@ -852,7 +852,17 @@ import hpdcache_pkg::*;
         // if (write_dir_coherence || fwd_tx_valid_o || coherence_evict_o.valid) begin
         //     coherence_busy_d = coherence_act.stall ? 1'b1 : 1'b0;
         // end else 
-        if (core_req_valid_i || fwd_rx_valid_i || coherence_rsp_valid_i || st1_req_updt_sel_victim) begin
+        if (rstall || wstall || evict_stall || inv_stall) begin
+            coherence_busy_d = 1'b0;
+            if (refill_write_dir_i && refill_core_rsp_valid_d) begin
+                coherence_busy_d = 1'b1;
+            end else if (op_decoded) begin
+                coherence_busy_d = 1'b1;
+            end
+        end else if (core_req_valid_i || 
+                    fwd_rx_valid_i || 
+                    coherence_rsp_valid_i || 
+                    st1_req_updt_sel_victim) begin
             coherence_busy_d = 1'b1;
         end
     end
@@ -860,7 +870,11 @@ import hpdcache_pkg::*;
     always_ff @(posedge clk_i or negedge rst_ni) begin
         if (!rst_ni) begin
             coherence_busy_q <= 1'b0;
-        end else if (write_dir_coherence || fwd_tx_valid_o || coherence_evict_o.valid || coherence_act.hit || free_coherence_q) begin
+        end else if (write_dir_coherence || 
+                    fwd_tx_valid_o || 
+                    coherence_evict_o.valid || 
+                    coherence_act.hit || 
+                    free_coherence_q) begin
             coherence_busy_q <= coherence_act.stall ? 1'b1 : 1'b0;
         end else begin
             coherence_busy_q <= coherence_busy_d;
@@ -876,7 +890,7 @@ import hpdcache_pkg::*;
 
         // Fwd is sink with higher priority than req
         if (!coherence_busy_q) begin
-            if (fwd_rx_valid_i && !inv_stall) begin
+            if (fwd_rx_valid_i && (!inv_stall || fwd_rx_i.fwd_msg_type == GET)) begin
                 fwd_rx_ready_o              = 1'b1;
             end else if (coherence_rsp_valid_i) begin
                 coherence_rsp_ready_o       = 1'b1;
@@ -1035,11 +1049,12 @@ import hpdcache_pkg::*;
 
         // if (coherence_rsp_valid_q && dir_coherence_gnt) begin
         // if (st1_req_updt_sel_victim && dir_coherence_gnt_q) begin
-        if (st1_req_updt_sel_victim && coherence_read_served_q && current_state != HPDCACHE_INVALID) begin
-            coherence_op    = OP_EVICT;
-            op_decoded      = 1'b1;
-        // end else if (coherence_rsp_valid_d && dir_coherence_gnt_q) begin
-        end else if (coherence_rsp_valid_d && coherence_read_served_q) begin
+        // if (st1_req_updt_sel_victim && coherence_read_served_q && current_state != HPDCACHE_INVALID) begin
+        //     coherence_op    = OP_EVICT;
+        //     op_decoded      = 1'b1;
+        // // end else if (coherence_rsp_valid_d && dir_coherence_gnt_q) begin
+        // end else 
+        if (coherence_rsp_valid_d && coherence_read_served_q) begin
             // if (!coherence_rsp_q.is_inv_ack_cnt) begin
             if (!coherence_rsp_d.is_inv_ack_cnt) begin
                 coherence_op = OP_EVICT_ACK;
@@ -1419,6 +1434,13 @@ import hpdcache_pkg::*;
                         coherence_act.update_line_state = 1'b1;
                         coherence_state_d               = HPDCACHE_SHARED;
                     end
+                    OP_GET: begin
+                        coherence_act.send_to_dir       = 1'b1;
+                        coherence_act.send_get_ack      = 1'b1;
+                        // coherence_act.update_line_state = 1'b1;
+                        coherence_act.flush_wbuf        = 1'b1;
+                        coherence_state_d               = HPDCACHE_ISD;
+                    end
                     default: ;
                 endcase
             end
@@ -1572,6 +1594,7 @@ import hpdcache_pkg::*;
     assign evict_addr_offset    = st1_req.addr_offset;
 
     // TODO: might block the flow, need to test and see
+    // FIXME: read after handshake complete, corresponding change needed at busy
     always_comb begin
         read_dir_coherence_d = read_dir_coherence_q;
         read_dir_coherence_set_d = read_dir_coherence_set_q;
@@ -1580,7 +1603,7 @@ import hpdcache_pkg::*;
             read_dir_coherence_d = 1'b1;
             read_dir_coherence_set_d = evict_addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
             read_dir_coherence_tag_d = evict_addr_tag;
-        end else if (coherence_rsp_valid_i) begin
+        end else if (coherence_rsp_valid_i && coherence_rsp_ready_o) begin
             read_dir_coherence_d = 1'b1;
             read_dir_coherence_set_d = coherence_rsp_i.addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
             read_dir_coherence_tag_d = coherence_rsp_i.addr_tag;
@@ -1589,11 +1612,11 @@ import hpdcache_pkg::*;
             read_dir_coherence_d = 1'b1;
             read_dir_coherence_set_d = refill_set_i;
             read_dir_coherence_tag_d = refill_dir_entry_i.tag;
-        end else if (fwd_rx_valid_i && !inv_stall) begin
+        end else if (fwd_rx_valid_i && fwd_rx_ready_o && (!inv_stall || fwd_rx_i.fwd_msg_type == GET)) begin
             read_dir_coherence_d = 1'b1;
             read_dir_coherence_set_d = fwd_rx_addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
             read_dir_coherence_tag_d = fwd_rx_addr_tag;
-        end else if (core_req_valid_i && !core_req_stall) begin
+        end else if (core_req_valid_i && core_req_ready_o && !core_req_stall) begin
             read_dir_coherence_d = 1'b1;
             read_dir_coherence_set_d = core_req_i.addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
             read_dir_coherence_tag_d = core_req_i.addr_tag;
