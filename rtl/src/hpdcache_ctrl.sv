@@ -520,7 +520,8 @@ import hpdcache_pkg::*;
     hpdcache_dir_entry_t   write_dir_coherence_wdata, write_dir_coherence_wdata_q, write_dir_coherence_wdata_d;
     hpdcache_dir_addr_t    write_dir_coherence_set;
     hpdcache_way_vector_t  write_dir_coherence_way, write_dir_coherence_way_q, write_dir_coherence_way_d;
-    logic [$clog2(HPDcacheCfg.u.ways)-1:0] coherence_rway, coherence_rway_d, coherence_rway_q;
+    // logic [$clog2(HPDcacheCfg.u.ways)-1:0] coherence_rway, coherence_rway_d, coherence_rway_q;
+    hpdcache_way_vector_t  coherence_rway;
 
     coherence_evict_t coherence_evict_d, coherence_evict_q;
     cache_dir_fwd_t            fwd_tx_d, fwd_tx_q;
@@ -1647,7 +1648,9 @@ import hpdcache_pkg::*;
 
     // Write to same address as last read
     assign write_dir_coherence_set = read_dir_coherence_set_q;
-    assign write_dir_coherence_way = 1'b1 << coherence_rway;   // TODO: latch on no gnt
+    // assign write_dir_coherence_way = 1'b1 << coherence_rway;
+    assign write_dir_coherence_way = coherence_rway;
+    // assign write_dir_coherence_way = coherence_read_served_q ? coherence_rway : '0;
 
     // TODO: latch way, wdata, valid flag when no gnt
     always_comb begin
@@ -1662,8 +1665,12 @@ import hpdcache_pkg::*;
         // end else 
         if (write_dir_coherence) begin
             write_dir_coherence_d = write_dir_coherence;
-            write_dir_coherence_way_d = write_dir_coherence_way;
+            // write_dir_coherence_way_d = write_dir_coherence_way;
             write_dir_coherence_wdata_d = write_dir_coherence_wdata;
+        end
+
+        if (coherence_read_served_q) begin
+            write_dir_coherence_way_d = write_dir_coherence_way;
         end
     end
 
@@ -1672,7 +1679,7 @@ import hpdcache_pkg::*;
             write_dir_coherence_q <= 1'b0;
             write_dir_coherence_way_q <= '0;
             write_dir_coherence_wdata_q <= '0;
-        end else if (write_dir_coherence_d && dir_coherence_gnt) begin
+        end else if (write_dir_coherence_d && dir_coherence_gnt && !coherence_read_served_q) begin
             write_dir_coherence_q <= 1'b0;
             write_dir_coherence_way_q <= write_dir_coherence_way_d;
             write_dir_coherence_wdata_q <= write_dir_coherence_wdata_d;
@@ -2009,7 +2016,8 @@ import hpdcache_pkg::*;
         .read_dir_coherence_rdata_o    (read_dir_coherence_rdata),    // rentry
         .coherence_dir_bank_gnt_o      (dir_coherence_gnt),
         .coherence_read_served_o       (coherence_read_served),
-        .way_id_o                      (coherence_rway)
+        .coherence_way_o               (coherence_rway)
+        // .way_id_o                      (coherence_rway)
     );
 
     assign st1_dir_hit           = |st1_dir_hit_way;

@@ -188,7 +188,8 @@ import hpdcache_pkg::*;
     output hpdcache_dir_entry_t                 read_dir_coherence_rdata_o,
     output logic                                coherence_dir_bank_gnt_o,
     output logic                                coherence_read_served_o,
-    output logic [$clog2(HPDcacheCfg.u.ways)-1:0] way_id_o
+    output hpdcache_way_vector_t                coherence_way_o
+    // output logic [$clog2(HPDcacheCfg.u.ways)-1:0] way_id_o
 );
     //  }}}
 
@@ -382,6 +383,7 @@ import hpdcache_pkg::*;
     hpdcache_way_vector_t                         dir_cs_q, dir_cs_d;
     hpdcache_way_vector_t                         dir_we_q, dir_we_d;
     hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] dir_wentry_q, dir_wentry_d;
+    hpdcache_way_vector_t                         coherence_victim_way;
 
     `FF(coherence_dir_bank_gnt_q, coherence_dir_bank_gnt, 1'b0, clk_i, rst_ni)
 
@@ -651,7 +653,8 @@ import hpdcache_pkg::*;
         // coherence_dir_addr    = write_dir_coherence_i ? write_dir_coherence_set_i :
         //                         (read_dir_coherence_i ? read_dir_coherence_set_i : '0);
         coherence_dir_cs      = write_dir_coherence_i ? write_dir_coherence_way_i : '1;
-        coherence_dir_we      = write_dir_coherence_i ? '1 : '0;
+        // coherence_dir_we      = write_dir_coherence_i ? '1 : '0;
+        coherence_dir_we      = write_dir_coherence_i ? write_dir_coherence_way_i : '0;
         coherence_dir_wentry  = '{HPDcacheCfg.u.ways{write_dir_coherence_wdata_i}};
 
         if (write_dir_coherence_i) begin
@@ -781,7 +784,10 @@ import hpdcache_pkg::*;
             dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}};
             if (cache_dir_bank_gnt) begin
                 dir_wmask[i] = {{COHRENCE_DIR_EXTEND_BITS{1'b0}}, {HPDCACHE_DIR_RAM_WIDTH-COHRENCE_DIR_EXTEND_BITS{1'b1}}};
-            end
+            end 
+            // else if (coherence_dir_bank_gnt) begin
+            //     dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}, {HPDCACHE_DIR_RAM_WIDTH-COHRENCE_DIR_EXTEND_BITS{1'b0}}};
+            // end
         end
     end
 
@@ -844,6 +850,7 @@ import hpdcache_pkg::*;
     // hpdcache_way_vector_t coherence_dir_hit_way;
     logic coherence_curr_line_hit;
     logic [$clog2(HPDcacheCfg.u.ways)-1:0] way_id;
+    hpdcache_way_vector_t coherence_hit_way;
 
     always_comb begin
         coherence_curr_line_hit = 1'b0;
@@ -867,8 +874,32 @@ import hpdcache_pkg::*;
         end
     end
 
-    assign way_id_o = way_id;
+    // assign way_id_o = way_id;
+    assign coherence_hit_way = coherence_curr_line_hit ? (1'b1 << way_id) : '0;
+    // assign coherence_way_o = 1'b1 << way_id;
+    assign coherence_way_o = coherence_curr_line_hit ? coherence_hit_way : coherence_victim_way;
     assign read_dir_coherence_rdata_o = coherence_curr_line_hit ? coherence_rentry : '0;
+
+    hpdcache_victim_sel #(
+        .HPDcacheCfg              (HPDcacheCfg),
+        .hpdcache_set_t           (hpdcache_set_t),
+        .hpdcache_way_vector_t    (hpdcache_way_vector_t)
+    ) i_coherence_victim_sel (
+        .clk_i,
+        .rst_ni,
+
+        .updt_i                   (1'b0),
+        .updt_set_i               ('0),
+        .updt_way_i               ('0),
+
+        .sel_victim_i             (/* unused */),
+        .sel_dir_valid_i          (dir_valid),
+        .sel_dir_wback_i          (dir_wback),
+        .sel_dir_dirty_i          (dir_dirty),
+        .sel_dir_fetch_i          (dir_fetch),
+        .sel_victim_set_i         (read_dir_coherence_set_i),
+        .sel_victim_way_o         (coherence_victim_way)
+    );
 
     //  Directory hit logic
     //  {{{
