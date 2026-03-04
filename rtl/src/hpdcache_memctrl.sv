@@ -211,7 +211,14 @@ import hpdcache_pkg::*;
     localparam int unsigned HPDCACHE_DATA_RAM_X_CUTS = HPDcacheCfg.u.accessWords;
     localparam int unsigned HPDCACHE_ALL_CUTS = HPDCACHE_DATA_RAM_X_CUTS*HPDCACHE_DATA_RAM_Y_CUTS;
 
-    localparam int unsigned COHRENCE_DIR_EXTEND_BITS = $bits(hpd_coherence_state_t)+$bits(inv_ack_cnt_t);
+    localparam int unsigned DIR_BYTE_SIZE = 32'd4;
+    localparam int unsigned DATA_BYTE_SIZE = 32'd8;
+    // This contaminates inv_ack_cnt field, but inv_ack_cnt is never used in practice
+    // TODO: consider removing inv_ack_cnt from directory entry to skim off these extra bits
+    // localparam int unsigned COHERENCE_DIR_EXTEND_BITS = $bits(hpd_coherence_state_t)+$bits(inv_ack_cnt_t);
+    localparam int unsigned COHERENCE_DIR_EXTEND_BITS = $bits(hpd_coherence_state_t);
+    localparam int unsigned COHERENCE_DIR_EXTEND_BYTES = (COHERENCE_DIR_EXTEND_BITS + DIR_BYTE_SIZE - 32'd1) / DIR_BYTE_SIZE;
+    localparam int unsigned HPDCACHE_DIR_RAM_BYTES = (HPDCACHE_DIR_RAM_WIDTH + DIR_BYTE_SIZE - 32'd1) / DIR_BYTE_SIZE;
 
     // typedef logic [HPDCACHE_DIR_RAM_ADDR_WIDTH-1:0] hpdcache_dir_addr_t;
 
@@ -240,7 +247,8 @@ import hpdcache_pkg::*;
           hpdcache_data_addr_t;
 
     // Coherence support types
-    typedef logic[HPDCACHE_DIR_RAM_WIDTH-1:0] hpdcache_dir_mask_t;
+    typedef logic[HPDCACHE_DIR_RAM_WIDTH-1:0]   hpdcache_dir_mask_t;
+    typedef logic[HPDCACHE_DIR_RAM_WIDTH/DIR_BYTE_SIZE-1:0] hpdcache_dir_be_t;
     //  }}}
 
     //  Definition of functions
@@ -376,6 +384,7 @@ import hpdcache_pkg::*;
     hpdcache_way_vector_t                         coherence_dir_we, served_dir_we;
     hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] coherence_dir_wentry, served_dir_wentry;
     hpdcache_dir_mask_t  [HPDcacheCfg.u.ways-1:0] dir_wmask;
+    hpdcache_dir_be_t    [HPDcacheCfg.u.ways-1:0] dir_wbe;
 
     logic                                      cache_dir_bank_gnt, coherence_dir_bank_gnt, coherence_dir_bank_gnt_q;
 
@@ -450,26 +459,62 @@ import hpdcache_pkg::*;
 // `endif
 //                 .rdata     (dir_rentry[dir_w])
 //             );
-            hpdcache_sram_wmask #(
-                .DATA_SIZE (HPDCACHE_DIR_RAM_WIDTH),
-                .ADDR_SIZE (HPDCACHE_DIR_RAM_ADDR_WIDTH)
+//             hpdcache_sram_wmask #(
+//                 .DATA_SIZE (HPDCACHE_DIR_RAM_WIDTH),
+//                 .ADDR_SIZE (HPDCACHE_DIR_RAM_ADDR_WIDTH)
+//             ) dir_sram (
+//                 .clk       (clk_i),
+//                 .rst_n     (rst_ni),
+// `ifdef NO_COHERENCE
+//                 .cs        (dir_cs[dir_w]),
+//                 .we        (dir_we[dir_w]),
+//                 .addr      (dir_addr),
+//                 .wdata     (dir_wentry[dir_w]),
+//                 .wmask     ({HPDcacheCfg.u.ways{1'b1}}),
+// `else
+//                 .cs        (served_dir_cs[dir_w]),
+//                 .we        (served_dir_we[dir_w]),
+//                 .addr      (served_dir_addr),
+//                 .wdata     (served_dir_wentry[dir_w]),
+//                 .wmask     (dir_wmask[dir_w]),
+// `endif
+//                 .rdata     (dir_rentry[dir_w])
+//             );
+
+            // hpdcache_sram_wbyteenable #(
+            //     .DATA_SIZE   (HPDCACHE_DIR_RAM_WIDTH),
+            //     .ADDR_SIZE   (HPDCACHE_DIR_RAM_ADDR_WIDTH)
+            // ) dir_sram (
+            //     .clk         (clk_i),
+            //     .rst_n       (rst_ni),
+            //     .cs          (served_dir_cs[dir_w]),
+            //     .we          (served_dir_we[dir_w]),
+            //     .addr        (served_dir_addr),
+            //     .wdata       (served_dir_wentry[dir_w]),
+            //     .wbyteenable (dir_wbe[dir_w]),
+            //     .rdata       (dir_rentry[dir_w])
+            // );
+
+            tc_sram_impl #(
+                .NumWords  (2**HPDCACHE_DIR_RAM_ADDR_WIDTH),
+                .DataWidth (HPDCACHE_DIR_RAM_WIDTH),
+                // .ByteWidth ($bits(tag_data_t)           ),
+                .ByteWidth (DIR_BYTE_SIZE               ),
+                .NumPorts  (1                           ),
+                .Latency   (1                           ),
+                .SimInit   ("zeros"                     )
+                // .impl_in_t (impl_in_t                   )
             ) dir_sram (
-                .clk       (clk_i),
-                .rst_n     (rst_ni),
-`ifdef NO_COHERENCE
-                .cs        (dir_cs[dir_w]),
-                .we        (dir_we[dir_w]),
-                .addr      (dir_addr),
-                .wdata     (dir_wentry[dir_w]),
-                .wmask     ({HPDcacheCfg.u.ways{1'b1}}),
-`else
-                .cs        (served_dir_cs[dir_w]),
-                .we        (served_dir_we[dir_w]),
-                .addr      (served_dir_addr),
-                .wdata     (served_dir_wentry[dir_w]),
-                .wmask     (dir_wmask[dir_w]),
-`endif
-                .rdata     (dir_rentry[dir_w])
+                .clk_i  (clk_i                   ),
+                .rst_ni (rst_ni                  ),
+                .impl_i ('0                      ),
+                .impl_o (/* unsed */             ),
+                .req_i  (served_dir_cs[dir_w]),
+                .we_i   (served_dir_we[dir_w]),
+                .addr_i (served_dir_addr),
+                .wdata_i(served_dir_wentry[dir_w]),
+                .be_i   (dir_wbe[dir_w]),
+                .rdata_o(dir_rentry[dir_w])
             );
         end
 
@@ -478,18 +523,39 @@ import hpdcache_pkg::*;
         for (y = 0; y < int'(HPDCACHE_DATA_RAM_Y_CUTS); y++) begin : gen_data_sram_row
             for (x = 0; x < int'(HPDCACHE_DATA_RAM_X_CUTS); x++) begin : gen_data_sram_col
                 if (HPDcacheCfg.u.dataRamByteEnable) begin : gen_data_sram_wbyteenable
-                    hpdcache_sram_wbyteenable #(
-                        .DATA_SIZE   (HPDCACHE_DATA_RAM_WIDTH),
-                        .ADDR_SIZE   (HPDCACHE_DATA_RAM_ADDR_WIDTH)
+                    // hpdcache_sram_wbyteenable #(
+                    //     .DATA_SIZE   (HPDCACHE_DATA_RAM_WIDTH),
+                    //     .ADDR_SIZE   (HPDCACHE_DATA_RAM_ADDR_WIDTH)
+                    // ) data_sram (
+                    //     .clk         (clk_i),
+                    //     .rst_n       (rst_ni),
+                    //     .cs          (data_cs[y][x]),
+                    //     .we          (data_we[y][x]),
+                    //     .addr        (data_addr[y][x]),
+                    //     .wdata       (data_wentry[y][x]),
+                    //     .wbyteenable (data_wbyteenable[y][x]),
+                    //     .rdata       (data_rentry[y][x])
+                    // );
+                    tc_sram_impl #(
+                        .NumWords  (2**HPDCACHE_DATA_RAM_ADDR_WIDTH),
+                        .DataWidth (HPDCACHE_DATA_RAM_WIDTH),
+                        // .ByteWidth ($bits(tag_data_t)           ),
+                        .ByteWidth (DATA_BYTE_SIZE               ),
+                        .NumPorts  (1                           ),
+                        .Latency   (1                           ),
+                        .SimInit   ("zeros"                     )
+                        // .impl_in_t (impl_in_t                   )
                     ) data_sram (
-                        .clk         (clk_i),
-                        .rst_n       (rst_ni),
-                        .cs          (data_cs[y][x]),
-                        .we          (data_we[y][x]),
-                        .addr        (data_addr[y][x]),
-                        .wdata       (data_wentry[y][x]),
-                        .wbyteenable (data_wbyteenable[y][x]),
-                        .rdata       (data_rentry[y][x])
+                        .clk_i  (clk_i                   ),
+                        .rst_ni (rst_ni                  ),
+                        .impl_i ('0                      ),
+                        .impl_o (/* unsed */             ),
+                        .req_i  (data_cs[y][x]),
+                        .we_i   (data_we[y][x]),
+                        .addr_i (data_addr[y][x]),
+                        .wdata_i(data_wentry[y][x]),
+                        .be_i   (data_wbyteenable[y][x]),
+                        .rdata_o(data_rentry[y][x])
                     );
                 end else begin : gen_data_sram_wmask
                     hpdcache_data_ram_data_t data_wmask;
@@ -504,6 +570,8 @@ import hpdcache_pkg::*;
                         end
                     end
 
+                    // Not replace as there is no tc_sram equivalent with wmask. 
+                    // `dataRamByteEnable` for HPDcache config should always be 1 in order not to trigger this branch 
                     hpdcache_sram_wmask #(
                         .DATA_SIZE   (HPDCACHE_DATA_RAM_WIDTH),
                         .ADDR_SIZE   (HPDCACHE_DATA_RAM_ADDR_WIDTH)
@@ -779,15 +847,24 @@ import hpdcache_pkg::*;
 
     assign coherence_dir_bank_gnt_o = coherence_dir_bank_gnt;
 
+    // for (genvar i = 0; i < HPDcacheCfg.u.ways; i++) begin
+    //     always_comb begin
+    //         dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}};
+    //         if (cache_dir_bank_gnt) begin
+    //             dir_wmask[i] = {{COHERENCE_DIR_EXTEND_BITS{1'b0}}, {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS{1'b1}}};
+    //         end 
+    //         // else if (coherence_dir_bank_gnt) begin
+    //         //     dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}, {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS{1'b0}}};
+    //         // end
+    //     end
+    // end
+
     for (genvar i = 0; i < HPDcacheCfg.u.ways; i++) begin
         always_comb begin
-            dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}};
+            dir_wbe[i] = {HPDCACHE_DIR_RAM_BYTES{1'b1}};
             if (cache_dir_bank_gnt) begin
-                dir_wmask[i] = {{COHRENCE_DIR_EXTEND_BITS{1'b0}}, {HPDCACHE_DIR_RAM_WIDTH-COHRENCE_DIR_EXTEND_BITS{1'b1}}};
-            end 
-            // else if (coherence_dir_bank_gnt) begin
-            //     dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}, {HPDCACHE_DIR_RAM_WIDTH-COHRENCE_DIR_EXTEND_BITS{1'b0}}};
-            // end
+                dir_wbe[i] = {{COHERENCE_DIR_EXTEND_BYTES{1'b0}}, {HPDCACHE_DIR_RAM_BYTES-COHERENCE_DIR_EXTEND_BYTES{1'b1}}};
+            end
         end
     end
 

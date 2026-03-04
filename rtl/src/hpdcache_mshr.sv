@@ -334,19 +334,39 @@ import hpdcache_pkg::*;
                 .rdata         (mshr_rdata)
             );
         end else begin : gen_mshr_sram
-            hpdcache_sram_wbyteenable #(
-                .DATA_SIZE     (HPDcacheCfg.u.mshrWays*HPDCACHE_MSHR_RAM_ENTRY_BITS),
-                .ADDR_SIZE     (HPDcacheCfg.mshrSetWidth),
-                .DEPTH         (HPDcacheCfg.u.mshrSets)
-            ) mshr_mem(
-                .clk           (clk_i),
-                .rst_n         (rst_ni),
-                .cs            (mshr_cs),
-                .we            (mshr_we),
-                .addr          (mshr_addr),
-                .wbyteenable   (mshr_wbyteenable),
-                .wdata         (mshr_wdata),
-                .rdata         (mshr_rdata)
+            // hpdcache_sram_wbyteenable #(
+            //     .DATA_SIZE     (HPDcacheCfg.u.mshrWays*HPDCACHE_MSHR_RAM_ENTRY_BITS),
+            //     .ADDR_SIZE     (HPDcacheCfg.mshrSetWidth),
+            //     .DEPTH         (HPDcacheCfg.u.mshrSets)
+            // ) mshr_mem(
+            //     .clk           (clk_i),
+            //     .rst_n         (rst_ni),
+            //     .cs            (mshr_cs),
+            //     .we            (mshr_we),
+            //     .addr          (mshr_addr),
+            //     .wbyteenable   (mshr_wbyteenable),
+            //     .wdata         (mshr_wdata),
+            //     .rdata         (mshr_rdata)
+            // );
+            tc_sram_impl #(
+                .NumWords  (2**HPDcacheCfg.mshrSetWidth),
+                .DataWidth (HPDcacheCfg.u.mshrWays*HPDCACHE_MSHR_RAM_ENTRY_BITS),
+                .ByteWidth (32'd8               ),
+                .NumPorts  (1                           ),
+                .Latency   (1                           ),
+                .SimInit   ("zeros"                     )
+                // .impl_in_t (impl_in_t                   )
+            ) mshr_mem (
+                .clk_i  (clk_i                   ),
+                .rst_ni (rst_ni                  ),
+                .impl_i ('0                      ),
+                .impl_o (/* unsed */             ),
+                .req_i  (mshr_cs),
+                .we_i   (mshr_we),
+                .addr_i (mshr_addr),
+                .wdata_i(mshr_wdata),
+                .be_i   (mshr_wbyteenable),
+                .rdata_o(mshr_rdata)
             );
         end
     end else begin : gen_mshr_wmask
