@@ -186,6 +186,7 @@ import hpdcache_pkg::*;
     input  hpdcache_way_vector_t                write_dir_coherence_way_i,
     input  hpdcache_dir_entry_t                 write_dir_coherence_wdata_i,
     output hpdcache_dir_entry_t                 read_dir_coherence_rdata_o,
+    output hpdcache_dir_entry_t                 coherence_evict_rdata_o,
     output logic                                coherence_dir_bank_gnt_o,
     output logic                                coherence_read_served_o,
     output hpdcache_way_vector_t                coherence_way_o
@@ -956,6 +957,7 @@ import hpdcache_pkg::*;
     // assign coherence_way_o = 1'b1 << way_id;
     assign coherence_way_o = coherence_curr_line_hit ? coherence_hit_way : coherence_victim_way;
     assign read_dir_coherence_rdata_o = coherence_curr_line_hit ? coherence_rentry : '0;
+    assign coherence_evict_rdata_o = dir_rentry[coherence_victim_way];
 
     hpdcache_victim_sel #(
         .HPDcacheCfg              (HPDcacheCfg),
