@@ -354,6 +354,7 @@ import hpdcache_pkg::*;
                 .ByteWidth (32'd8               ),
                 .NumPorts  (1                           ),
                 .Latency   (1                           ),
+                .PrintSimCfg(1),
                 .SimInit   ("zeros"                     )
                 // .impl_in_t (impl_in_t                   )
             ) mshr_mem (

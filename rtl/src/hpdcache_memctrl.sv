@@ -496,26 +496,42 @@ import hpdcache_pkg::*;
             //     .rdata       (dir_rentry[dir_w])
             // );
 
-            tc_sram_impl #(
-                .NumWords  (2**HPDCACHE_DIR_RAM_ADDR_WIDTH),
-                .DataWidth (HPDCACHE_DIR_RAM_WIDTH),
-                // .ByteWidth ($bits(tag_data_t)           ),
-                .ByteWidth (DIR_BYTE_SIZE               ),
-                .NumPorts  (1                           ),
-                .Latency   (1                           ),
-                .SimInit   ("zeros"                     )
-                // .impl_in_t (impl_in_t                   )
+            // tc_sram_impl #(
+            //     .NumWords  (2**HPDCACHE_DIR_RAM_ADDR_WIDTH),
+            //     .DataWidth (HPDCACHE_DIR_RAM_WIDTH),
+            //     // .ByteWidth ($bits(tag_data_t)           ),
+            //     .ByteWidth (DIR_BYTE_SIZE               ),
+            //     .NumPorts  (1                           ),
+            //     .Latency   (1                           ),
+            //     .PrintSimCfg(1),
+            //     .SimInit   ("zeros"                     )
+            //     // .impl_in_t (impl_in_t                   )
+            // ) dir_sram (
+            //     .clk_i  (clk_i                   ),
+            //     .rst_ni (rst_ni                  ),
+            //     .impl_i ('0                      ),
+            //     .impl_o (/* unsed */             ),
+            //     .req_i  (served_dir_cs[dir_w]),
+            //     .we_i   (served_dir_we[dir_w]),
+            //     .addr_i (served_dir_addr),
+            //     .wdata_i(served_dir_wentry[dir_w]),
+            //     .be_i   (dir_wbe[dir_w]),
+            //     .rdata_o(dir_rentry[dir_w])
+            // );
+
+            hpdcache_regbank_whbyteenable_1rw #(
+                .DATA_SIZE   (HPDCACHE_DIR_RAM_WIDTH),
+                .ADDR_SIZE   (HPDCACHE_DIR_RAM_ADDR_WIDTH)
+                // .BYTE_SIZE   (DIR_BYTE_SIZE)
             ) dir_sram (
-                .clk_i  (clk_i                   ),
-                .rst_ni (rst_ni                  ),
-                .impl_i ('0                      ),
-                .impl_o (/* unsed */             ),
-                .req_i  (served_dir_cs[dir_w]),
-                .we_i   (served_dir_we[dir_w]),
-                .addr_i (served_dir_addr),
-                .wdata_i(served_dir_wentry[dir_w]),
-                .be_i   (dir_wbe[dir_w]),
-                .rdata_o(dir_rentry[dir_w])
+                .clk         (clk_i),
+                .rst_n       (rst_ni),
+                .cs          (served_dir_cs[dir_w]),
+                .we          (served_dir_we[dir_w]),
+                .addr        (served_dir_addr),
+                .wdata       (served_dir_wentry[dir_w]),
+                .wbyteenable (dir_wbe[dir_w]),
+                .rdata       (dir_rentry[dir_w])
             );
         end
 
@@ -537,26 +553,42 @@ import hpdcache_pkg::*;
                     //     .wbyteenable (data_wbyteenable[y][x]),
                     //     .rdata       (data_rentry[y][x])
                     // );
-                    tc_sram_impl #(
-                        .NumWords  (2**HPDCACHE_DATA_RAM_ADDR_WIDTH),
-                        .DataWidth (HPDCACHE_DATA_RAM_WIDTH),
-                        // .ByteWidth ($bits(tag_data_t)           ),
-                        .ByteWidth (DATA_BYTE_SIZE               ),
-                        .NumPorts  (1                           ),
-                        .Latency   (1                           ),
-                        .SimInit   ("zeros"                     )
-                        // .impl_in_t (impl_in_t                   )
-                    ) data_sram (
-                        .clk_i  (clk_i                   ),
-                        .rst_ni (rst_ni                  ),
-                        .impl_i ('0                      ),
-                        .impl_o (/* unsed */             ),
-                        .req_i  (data_cs[y][x]),
-                        .we_i   (data_we[y][x]),
-                        .addr_i (data_addr[y][x]),
-                        .wdata_i(data_wentry[y][x]),
-                        .be_i   (data_wbyteenable[y][x]),
-                        .rdata_o(data_rentry[y][x])
+                    // tc_sram_impl #(
+                    //     .NumWords  (2**HPDCACHE_DATA_RAM_ADDR_WIDTH),
+                    //     .DataWidth (HPDCACHE_DATA_RAM_WIDTH),
+                    //     // .ByteWidth ($bits(tag_data_t)           ),
+                    //     .ByteWidth (DATA_BYTE_SIZE               ),
+                    //     .NumPorts  (1                           ),
+                    //     .Latency   (1                           ),
+                    //     .PrintSimCfg(1),
+                    //     .SimInit   ("zeros"                     )
+                    //     // .impl_in_t (impl_in_t                   )
+                    // ) data_sram (
+                    //     .clk_i  (clk_i                   ),
+                    //     .rst_ni (rst_ni                  ),
+                    //     .impl_i ('0                      ),
+                    //     .impl_o (/* unsed */             ),
+                    //     .req_i  (data_cs[y][x]),
+                    //     .we_i   (data_we[y][x]),
+                    //     .addr_i (data_addr[y][x]),
+                    //     .wdata_i(data_wentry[y][x]),
+                    //     .be_i   (data_wbyteenable[y][x]),
+                    //     .rdata_o(data_rentry[y][x])
+                    // );
+
+                    hpdcache_regbank_wbyteenable_1rw #(
+                        .DATA_SIZE   (HPDCACHE_DATA_RAM_WIDTH),
+                        .ADDR_SIZE   (HPDCACHE_DATA_RAM_ADDR_WIDTH)
+                        // .BYTE_SIZE   (DIR_BYTE_SIZE)
+                    ) dir_sram (
+                        .clk         (clk_i),
+                        .rst_n       (rst_ni),
+                        .cs          (data_cs[y][x]),
+                        .we          (data_we[y][x]),
+                        .addr        (data_addr[y][x]),
+                        .wdata       (data_wentry[y][x]),
+                        .wbyteenable (data_wbyteenable[y][x]),
+                        .rdata       (data_rentry[y][x])
                     );
                 end else begin : gen_data_sram_wmask
                     hpdcache_data_ram_data_t data_wmask;

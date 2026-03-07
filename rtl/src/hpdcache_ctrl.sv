@@ -1132,7 +1132,7 @@ import hpdcache_pkg::*;
         // end else if (core_req_valid_q && dir_coherence_gnt) begin
         // end else if (core_req_valid_d && dir_coherence_gnt_q) begin
         end else if (st1_dir_victim_valid && st2_dir_updt_d && !evict_stall) begin
-            coherence_op = coherence_busy_d ? OP_REPLACE : OP_EVICT;
+            coherence_op = coherence_busy_q ? OP_REPLACE : OP_EVICT;
             op_decoded   = 1'b1;
         end else if (core_req_valid_d && coherence_read_served_q && !core_req_stall) begin
             // unique case (core_req_q.op)

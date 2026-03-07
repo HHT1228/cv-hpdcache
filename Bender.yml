@@ -37,6 +37,7 @@ sources:
   - rtl/src/common/hpdcache_sram_wbyteenable.sv
   - rtl/src/common/hpdcache_sram_wmask.sv
   - rtl/src/common/hpdcache_regbank_wbyteenable_1rw.sv
+  - rtl/src/common/hpdcache_regbank_whbyteenable_1rw.sv
   - rtl/src/common/hpdcache_regbank_wmask_1rw.sv
   - rtl/src/common/hpdcache_data_downsize.sv
   - rtl/src/common/hpdcache_data_resize.sv
