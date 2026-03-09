@@ -62,7 +62,7 @@ module dir_access_arb #(
   assign dir_we_o     = final_req_pack.dir_we;
   assign dir_wentry_o = final_req_pack.dir_wentry;
 
-  assign coherence_read_served_o = coherence_gnt_o && !final_req_pack.dir_we;
+  assign coherence_read_served_o = coherence_gnt_o && !(|(final_req_pack.dir_we));
 
   // assign req_valid = (comb_dir_cs_i != '0) || coherence_req_i;
 

@@ -553,6 +553,7 @@ import hpdcache_pkg::*;
                     //     .wbyteenable (data_wbyteenable[y][x]),
                     //     .rdata       (data_rentry[y][x])
                     // );
+                    
                     // tc_sram_impl #(
                     //     .NumWords  (2**HPDCACHE_DATA_RAM_ADDR_WIDTH),
                     //     .DataWidth (HPDCACHE_DATA_RAM_WIDTH),
@@ -580,7 +581,7 @@ import hpdcache_pkg::*;
                         .DATA_SIZE   (HPDCACHE_DATA_RAM_WIDTH),
                         .ADDR_SIZE   (HPDCACHE_DATA_RAM_ADDR_WIDTH)
                         // .BYTE_SIZE   (DIR_BYTE_SIZE)
-                    ) dir_sram (
+                    ) data_sram (
                         .clk         (clk_i),
                         .rst_n       (rst_ni),
                         .cs          (data_cs[y][x]),
@@ -1003,7 +1004,7 @@ import hpdcache_pkg::*;
         .updt_set_i               ('0),
         .updt_way_i               ('0),
 
-        .sel_victim_i             (/* unused */),
+        .sel_victim_i             (1'b0),       // Unused for PLRU
         .sel_dir_valid_i          (dir_valid),
         .sel_dir_wback_i          (dir_wback),
         .sel_dir_dirty_i          (dir_dirty),

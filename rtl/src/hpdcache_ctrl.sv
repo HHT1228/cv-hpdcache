@@ -540,6 +540,7 @@ import hpdcache_pkg::*;
     logic                 pending_core_req_q, pending_core_req_d;
     // logic                 evict_read, evict_read_q;
     // logic                 evict_by_core_req;
+    logic                 core_req_is_rw;
 
     `FF(coherence_act_q, coherence_act, '0, clk_i, rst_ni)
     `FF(next_coherence_state_q, next_coherence_state, HPDCACHE_INVALID, clk_i, rst_ni)
@@ -853,6 +854,8 @@ import hpdcache_pkg::*;
     * COHERENCE SUPPORT LOGIC
     *************************/
 
+    assign core_req_is_rw = (core_req_i.op == HPDCACHE_REQ_LOAD) || (core_req_i.op == HPDCACHE_REQ_STORE);
+
     always_comb begin
         coherence_busy_d = coherence_busy_q;
         // if (write_dir_coherence || fwd_tx_valid_o || coherence_evict_o.valid) begin
@@ -865,7 +868,7 @@ import hpdcache_pkg::*;
             end else if (op_decoded) begin
                 coherence_busy_d = 1'b1;
             end
-        end else if (core_req_valid_i || 
+        end else if ((core_req_valid_i && core_req_is_rw) || 
                     fwd_rx_valid_i || 
                     coherence_rsp_valid_i || 
                     st1_req_updt_sel_victim ||
@@ -879,9 +882,9 @@ import hpdcache_pkg::*;
             coherence_busy_q <= 1'b0;
         end else if (write_dir_coherence || 
                     fwd_tx_valid_o || 
-                    coherence_evict_o.valid || 
-                    coherence_act.hit || 
+                    core_rsp_valid_o ||
                     free_coherence_q) begin
+        // coherence_act.hit || 
             coherence_busy_q <= coherence_act.stall ? 1'b1 : 1'b0;
         end else begin
             coherence_busy_q <= coherence_busy_d;
@@ -941,7 +944,7 @@ import hpdcache_pkg::*;
 
     always_comb begin : pending_core_req
         pending_core_req_d = pending_core_req_q;
-        if (core_req_valid_i && core_req_ready_o) begin
+        if (core_req_valid_i && core_req_ready_o && core_req_is_rw) begin
             // Core req can be held even when handshake is complete
             // Eviction should be handled before processing the request itself
             pending_core_req_d = 1'b1;
@@ -1139,9 +1142,11 @@ import hpdcache_pkg::*;
             unique case (core_req_d.op)
                 HPDCACHE_REQ_LOAD: begin
                     coherence_op = OP_READ;
+                    op_decoded = 1'b1;
                 end
                 HPDCACHE_REQ_STORE: begin
                     coherence_op = OP_WRITE;
+                    op_decoded = 1'b1;
                 end
                 // HPDCACHE_REQ_CMO_INVAL_NLINE: begin
                 //     coherence_op = OP_INV;
@@ -1150,7 +1155,7 @@ import hpdcache_pkg::*;
                     coherence_op = OP_NONE;
                 end
             endcase
-            op_decoded = 1'b1;
+            // op_decoded = 1'b1;
         // FIXME: need more reliable way of decoding eviction
         // Move before req, evict then process req
         end else begin
@@ -1364,7 +1369,7 @@ import hpdcache_pkg::*;
                         coherence_act.flush_wbuf        = 1'b1;
                         coherence_state_d               = HPDCACHE_INVALID;
                     end
-                    // These two cases happens during testing, so must be handled
+                    // Following cases are possible, thus must be handled
                     // Unusual behavior, realted to how eviction is handled.
                     OP_INV_ACK_CNT: begin
                         pending_inv_acks_d              = coherence_rsp_d.inv_ack_cnt;
@@ -1377,6 +1382,11 @@ import hpdcache_pkg::*;
                             free_coherence = 1'b1;
                         end
                         pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
+                    end
+                    // Lines could be I in L1 but M in L2 due to write-through behavior
+                    OP_INV: begin
+                        coherence_act.send_inv_ack      = 1'b1;
+                        coherence_state_d               = HPDCACHE_INVALID;
                     end
                     default: ;
                 endcase
@@ -1678,8 +1688,12 @@ import hpdcache_pkg::*;
         // end else if (core_req_valid_i && core_req_ready_o && !core_req_stall) begin
         end else if (pending_core_req_d && !core_req_stall) begin
             read_dir_coherence_d = 1'b1;
-            read_dir_coherence_set_d = core_req_i.addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
-            read_dir_coherence_tag_d = core_req_i.addr_tag;
+            if (!coherence_busy_q) begin
+                read_dir_coherence_set_d = core_req_i.addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
+                read_dir_coherence_tag_d = core_req_i.addr_tag;
+            end
+            // read_dir_coherence_set_d = core_req_i.addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
+            // read_dir_coherence_tag_d = core_req_i.addr_tag;
         end
     end
 
