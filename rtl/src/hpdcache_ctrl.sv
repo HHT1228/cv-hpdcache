@@ -498,6 +498,7 @@ import hpdcache_pkg::*;
     // coherence_op_t           coherence_op_req, coherence_op_rsp, coherence_op_fwd;
     logic                    dir_coherence_gnt, dir_coherence_gnt_q;
     logic                    coherence_read_served, coherence_read_served_q;
+    logic                    coherence_write_complete;
     inv_ack_cnt_t            inv_ack_received;
     hpdcache_inv_meta_t      inv_req_meta, inv_req_meta_q, inv_req_meta_d;
 
@@ -861,6 +862,7 @@ import hpdcache_pkg::*;
     *************************/
 
     assign core_req_is_rw = (core_req_i.op == HPDCACHE_REQ_LOAD) || (core_req_i.op == HPDCACHE_REQ_STORE);
+    assign coherence_write_complete = dir_coherence_gnt_q && !coherence_read_served_q;
 
     always_comb begin
         coherence_busy_d = coherence_busy_q;
@@ -886,9 +888,9 @@ import hpdcache_pkg::*;
     always_ff @(posedge clk_i or negedge rst_ni) begin
         if (!rst_ni) begin
             coherence_busy_q <= 1'b0;
-        end else if (write_dir_coherence || 
+        end else if ((coherence_write_complete && !read_dir_coherence_d) || 
                     fwd_tx_valid_o || 
-                    core_rsp_valid_o ||
+                    (core_rsp_valid_o && st1_req_is_load) ||
                     free_coherence_q) begin
         // coherence_act.hit || 
             coherence_busy_q <= coherence_act.stall ? 1'b1 : 1'b0;
