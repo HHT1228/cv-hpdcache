@@ -536,7 +536,11 @@ import hpdcache_pkg::*;
 
     logic                 coherence_core_req_ready, pe_core_req_ready;
     // logic                 coherence_stall, coherence_stall_q, coherence_stall_d;
-    logic                 rstall, wstall, evict_stall, inv_stall, get_stall;
+    logic                 rstall, wstall, evict_stall, inv_stall;
+    logic   __rstall_d, __wstall_d, __evict_stall_d, __inv_stall_d;
+    logic   __rstall_q, __wstall_q, __evict_stall_q, __inv_stall_q;
+    hpd_coherence_state_t __coherence_state_q, __coherence_state_d;
+    logic   restore_aft_get, restore_aft_get_q;
     logic                 fwd_stall, core_req_stall, coherence_stall;
     logic                 pending_core_req_q, pending_core_req_d;
     // logic                 serving_refill_q, serving_refill_d;
@@ -920,39 +924,45 @@ import hpdcache_pkg::*;
     end
 
     always_comb begin : rwe_stall   // READ WRITE EVICT stall
-        rstall          = 1'b0;
-        wstall          = 1'b0;
-        evict_stall     = 1'b0;
-        inv_stall       = 1'b0;
-        get_stall       = 1'b0;
-        unique case (coherence_state_q)
-            HPDCACHE_ISD: begin
-                rstall          = 1'b1;
-                wstall          = 1'b1;
-                evict_stall     = 1'b1;
-                inv_stall       = 1'b1;
-                get_stall       = 1'b1;
-            end
-            HPDCACHE_MIA, HPDCACHE_EIA, HPDCACHE_SIA, HPDCACHE_IIA: begin
-                rstall          = 1'b1;
-                wstall          = 1'b1;
-            end
-            HPDCACHE_SMA: begin
-                wstall          = 1'b1;
-                evict_stall     = 1'b1;
-            end
-            default: begin
-                rstall          = 1'b0;
-                wstall          = 1'b0;
-                evict_stall     = 1'b0;
-                inv_stall       = 1'b0;
-            end
-        endcase
+        // rstall          = 1'b0;
+        // wstall          = 1'b0;
+        // evict_stall     = 1'b0;
+        // inv_stall       = 1'b0;
+        // get_stall       = 1'b0;
+        rstall          = restore_aft_get_q ? __rstall_q : 1'b0;
+        wstall          = restore_aft_get_q ? __wstall_q : 1'b0;
+        evict_stall     = restore_aft_get_q ? __evict_stall_q : 1'b0;
+        inv_stall       = restore_aft_get_q ? __inv_stall_q : 1'b0;
+        if (!restore_aft_get_q) begin
+            unique case (coherence_state_q)
+                HPDCACHE_ISD: begin
+                    rstall          = 1'b1;
+                    wstall          = 1'b1;
+                    evict_stall     = 1'b1;
+                    inv_stall       = 1'b1;
+                    // get_stall       = 1'b1;
+                end
+                HPDCACHE_MIA, HPDCACHE_EIA, HPDCACHE_SIA, HPDCACHE_IIA: begin
+                    rstall          = 1'b1;
+                    wstall          = 1'b1;
+                end
+                HPDCACHE_SMA: begin
+                    wstall          = 1'b1;
+                    evict_stall     = 1'b1;
+                end
+                default: begin
+                    rstall          = 1'b0;
+                    wstall          = 1'b0;
+                    evict_stall     = 1'b0;
+                    inv_stall       = 1'b0;
+                end
+            endcase
+        end
     end
 
     assign core_req_stall   = rstall && wstall;
-    assign fwd_stall        = inv_stall && get_stall;
-    assign coherence_stall  = rstall || wstall || evict_stall || inv_stall || get_stall;
+    // assign fwd_stall        = inv_stall && get_stall;
+    assign coherence_stall  = rstall || wstall || evict_stall || inv_stall;
 
     always_comb begin : pending_core_req
         pending_core_req_d = pending_core_req_q;
@@ -1220,14 +1230,16 @@ import hpdcache_pkg::*;
 
         if (coherence_act.send_inv_ack) begin
             fwd_tx_valid_d          = 1'b1;
-            fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
+            // fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
+            fwd_tx_d.addr           = fwd_rx_d.addr;
             fwd_tx_d.fwd_msg_type   = INV_ACK;
             fwd_tx_d.line_state     = next_coherence_state;
             fwd_tx_d.new_owner      = fwd_rx_d.new_owner;
             fwd_tx_d.num_inv_ack    = 1;
         end else if (coherence_act.send_get_ack) begin
             fwd_tx_valid_d          = 1'b1;
-            fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
+            // fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
+            fwd_tx_d.addr           = fwd_rx_d.addr;
             fwd_tx_d.fwd_msg_type   = GET_ACK;
             // fwd_tx_d.line_state     = next_coherence_state;
             fwd_tx_d.line_state     = current_state;
@@ -1238,7 +1250,6 @@ import hpdcache_pkg::*;
 
     assign fwd_tx_valid_o = fwd_tx_valid_d;
     assign fwd_tx_o       = fwd_tx_d;
-
 
     always_ff @(posedge clk_i or negedge rst_ni) begin : hpd_act_fwd_tx_ff
         if (!rst_ni) begin
@@ -1340,13 +1351,40 @@ import hpdcache_pkg::*;
         end
     end
 
+    // GET cut-in: restore state after serving get
+    // GET must be served without delay, otherwise it can cause deadlock
+
+    always_comb begin : latch_current_state
+        __rstall_d          = __rstall_q;
+        __wstall_d          = __wstall_q;
+        __evict_stall_d     = __evict_stall_q;
+        __inv_stall_d       = __inv_stall_q;
+        __coherence_state_d = __coherence_state_q;
+        if (coherence_stall && fwd_rx_valid_i && fwd_rx_i.fwd_msg_type == GET) begin
+            __rstall_d          = rstall;
+            __wstall_d          = wstall;
+            __evict_stall_d     = evict_stall;
+            __inv_stall_d       = inv_stall;
+            __coherence_state_d = coherence_state_q;
+        end
+    end
+
+    assign restore_aft_get = fwd_tx_valid_o && (fwd_tx_d.fwd_msg_type == GET_ACK) && coherence_stall;
+
+    `FF(__rstall_q, __rstall_d, 1'b0, clk_i, rst_ni)
+    `FF(__wstall_q, __wstall_d, 1'b0, clk_i, rst_ni)
+    `FF(__evict_stall_q, __evict_stall_d, 1'b0, clk_i, rst_ni)
+    `FF(__inv_stall_q, __inv_stall_d, 1'b0, clk_i, rst_ni)
+    `FF(__coherence_state_q, __coherence_state_d, HPDCACHE_INVALID, clk_i, rst_ni)
+    `FF(restore_aft_get_q, restore_aft_get, 1'b0, clk_i, rst_ni)
+
     // Coherence state FSM
     // assign current_state = dir_coherence_gnt_q ? read_dir_coherence_rdata.coherence_state : coherence_state_q;
     // assign current_state = coherence_read_served_q ? read_dir_coherence_rdata.coherence_state : coherence_state_q;
     always_comb begin : coherence_logic
         // Default: hold
         current_state = coherence_state_q;
-        coherence_state_d = coherence_state_q;
+        coherence_state_d = restore_aft_get_q? __coherence_state_q : coherence_state_q;
         coherence_act = '0;
         pending_inv_acks_d = pending_inv_acks_q;
         free_coherence = 1'b0;
@@ -1392,7 +1430,7 @@ import hpdcache_pkg::*;
                             coherence_state_d               = HPDCACHE_INVALID;
                         end
                         pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
-                        free_coherence = 1'b1;
+                        free_coherence                  = 1'b1;
                     end
                     // Lines could be I in L1 but M in L2 due to write-through behavior
                     OP_INV: begin
@@ -1564,6 +1602,7 @@ import hpdcache_pkg::*;
                         if (pending_inv_acks_q == fwd_rx_d.num_inv_ack) begin
                             coherence_act.update_line_state = 1'b1;
                             coherence_state_d               = HPDCACHE_MODIFIED;
+                            free_coherence                  = 1'b1;
                         end
                         pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
                     end
