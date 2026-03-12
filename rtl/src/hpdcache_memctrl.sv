@@ -554,43 +554,43 @@ import hpdcache_pkg::*;
                     //     .rdata       (data_rentry[y][x])
                     // );
                     
-                    // tc_sram_impl #(
-                    //     .NumWords  (2**HPDCACHE_DATA_RAM_ADDR_WIDTH),
-                    //     .DataWidth (HPDCACHE_DATA_RAM_WIDTH),
-                    //     // .ByteWidth ($bits(tag_data_t)           ),
-                    //     .ByteWidth (DATA_BYTE_SIZE               ),
-                    //     .NumPorts  (1                           ),
-                    //     .Latency   (1                           ),
-                    //     .PrintSimCfg(1),
-                    //     .SimInit   ("zeros"                     )
-                    //     // .impl_in_t (impl_in_t                   )
-                    // ) data_sram (
-                    //     .clk_i  (clk_i                   ),
-                    //     .rst_ni (rst_ni                  ),
-                    //     .impl_i ('0                      ),
-                    //     .impl_o (/* unsed */             ),
-                    //     .req_i  (data_cs[y][x]),
-                    //     .we_i   (data_we[y][x]),
-                    //     .addr_i (data_addr[y][x]),
-                    //     .wdata_i(data_wentry[y][x]),
-                    //     .be_i   (data_wbyteenable[y][x]),
-                    //     .rdata_o(data_rentry[y][x])
-                    // );
-
-                    hpdcache_regbank_wbyteenable_1rw #(
-                        .DATA_SIZE   (HPDCACHE_DATA_RAM_WIDTH),
-                        .ADDR_SIZE   (HPDCACHE_DATA_RAM_ADDR_WIDTH)
-                        // .BYTE_SIZE   (DIR_BYTE_SIZE)
+                    tc_sram_impl #(
+                        .NumWords  (2**HPDCACHE_DATA_RAM_ADDR_WIDTH),
+                        .DataWidth (HPDCACHE_DATA_RAM_WIDTH),
+                        // .ByteWidth ($bits(tag_data_t)        ),
+                        .ByteWidth (DATA_BYTE_SIZE              ),
+                        .NumPorts  (1                           ),
+                        .Latency   (1                           ),
+                        .PrintSimCfg(1                          ),
+                        .SimInit   ("zeros"                     )
+                        // .impl_in_t (impl_in_t                   )
                     ) data_sram (
-                        .clk         (clk_i),
-                        .rst_n       (rst_ni),
-                        .cs          (data_cs[y][x]),
-                        .we          (data_we[y][x]),
-                        .addr        (data_addr[y][x]),
-                        .wdata       (data_wentry[y][x]),
-                        .wbyteenable (data_wbyteenable[y][x]),
-                        .rdata       (data_rentry[y][x])
+                        .clk_i  (clk_i                   ),
+                        .rst_ni (rst_ni                  ),
+                        .impl_i ('0                      ),
+                        .impl_o (/* unsed */             ),
+                        .req_i  (data_cs[y][x]),
+                        .we_i   (data_we[y][x]),
+                        .addr_i (data_addr[y][x]),
+                        .wdata_i(data_wentry[y][x]),
+                        .be_i   (data_wbyteenable[y][x]),
+                        .rdata_o(data_rentry[y][x])
                     );
+
+                    // hpdcache_regbank_wbyteenable_1rw #(
+                    //     .DATA_SIZE   (HPDCACHE_DATA_RAM_WIDTH),
+                    //     .ADDR_SIZE   (HPDCACHE_DATA_RAM_ADDR_WIDTH)
+                    //     // .BYTE_SIZE   (DIR_BYTE_SIZE)
+                    // ) data_sram (
+                    //     .clk         (clk_i),
+                    //     .rst_n       (rst_ni),
+                    //     .cs          (data_cs[y][x]),
+                    //     .we          (data_we[y][x]),
+                    //     .addr        (data_addr[y][x]),
+                    //     .wdata       (data_wentry[y][x]),
+                    //     .wbyteenable (data_wbyteenable[y][x]),
+                    //     .rdata       (data_rentry[y][x])
+                    // );
                 end else begin : gen_data_sram_wmask
                     hpdcache_data_ram_data_t data_wmask;
 
@@ -698,7 +698,7 @@ import hpdcache_pkg::*;
                 for (hpdcache_uint i = 0; i < HPDcacheCfg.u.ways; i++) begin
                     dir_wentry[i] = '{
                         coherence_state: HPDCACHE_INVALID,
-                        num_pending_inv_acks: '0,
+                        // num_pending_inv_acks: '0,
                         valid: dir_cmo_updt_valid_i,
                         wback: dir_cmo_updt_wback_i,
                         dirty: dir_cmo_updt_dirty_i,
@@ -717,7 +717,7 @@ import hpdcache_pkg::*;
                 for (hpdcache_uint i = 0; i < HPDcacheCfg.u.ways; i++) begin
                     dir_wentry[i] = '{
                         coherence_state: HPDCACHE_INVALID,
-                        num_pending_inv_acks: '0,
+                        // num_pending_inv_acks: '0,
                         valid: dir_updt_valid_i,
                         wback: dir_updt_wback_i,
                         dirty: dir_updt_dirty_i,

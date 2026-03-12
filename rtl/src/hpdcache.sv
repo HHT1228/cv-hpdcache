@@ -183,7 +183,7 @@ import hpdcache_pkg::*;
     typedef struct packed {
         // CACHE_INVALID should be sync with valid bit
         hpd_coherence_state_t   coherence_state;
-        inv_ack_cnt_t           num_pending_inv_acks;
+        // inv_ack_cnt_t           num_pending_inv_acks;
 
         //  Cacheline state
         //  Encoding: {valid, wb, dirty, fetch}
@@ -450,6 +450,11 @@ import hpdcache_pkg::*;
     hpdcache_dir_entry_t   read_dir_coherence_rdata;
     hpdcache_tag_t         read_dir_coherence_tag;
 
+    logic                  abort_cmo_inv;
+    // core_req_abort;
+
+    // assign core_req_abort = core_req_abort_i | abort_cmo_inv;
+
     localparam logic [HPDcacheCfg.u.memIdWidth-1:0] HPDCACHE_UC_READ_ID =
         {HPDcacheCfg.u.memIdWidth{1'b1}};
     localparam logic [HPDcacheCfg.u.memIdWidth-1:0] HPDCACHE_UC_WRITE_ID =
@@ -471,8 +476,10 @@ import hpdcache_pkg::*;
         .core_req_ready_o,
         .core_req_i,
         .core_req_abort_i,
+        // .core_req_abort_i                   (core_req_abort),
         .core_req_tag_i,
         .core_req_pma_i,
+        .abort_cmo_inv_i                    (abort_cmo_inv),
 
         .core_rsp_valid_i                   (core_rsp_valid),
         .core_rsp_i                         (core_rsp),
@@ -480,7 +487,7 @@ import hpdcache_pkg::*;
         .core_rsp_o,
 
         .arb_req_valid_o                    (arb_req_valid),
-        .arb_req_ready_i                    (arb_req_ready),
+        .arb_req_ready_i                    (arb_req_ready | abort_cmo_inv),
         .arb_req_o                          (arb_req),
         .arb_abort_o                        (arb_abort),
         .arb_tag_o                          (arb_tag),
@@ -562,6 +569,7 @@ import hpdcache_pkg::*;
         // .coherence_req_valid_o              (coherence_req_valid_o),
         .coherence_evict_o                  (coherence_evict_o),
         .coherence_evict_ready_i            (coherence_evict_ready_i),
+        .abort_cmo_inv_o                    (abort_cmo_inv),
 
         .wbuf_flush_i,
 

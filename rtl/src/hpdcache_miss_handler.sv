@@ -563,7 +563,7 @@ import hpdcache_pkg::*;
     //  In case of error in the refill response, invalidate pre-allocated cache directory entry
     assign refill_dir_entry_o = '{
         coherence_state: HPDCACHE_INVALID,
-        num_pending_inv_acks: '0,
+        // num_pending_inv_acks: '0,
         valid   : ~refill_is_error_o,
         // valid   : !$isunknown(refill_tag_q),
         wback   : ~refill_is_error_o & refill_wback_q,

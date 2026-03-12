@@ -53,6 +53,8 @@ import hpdcache_pkg::*;
     input  hpdcache_tag_t                 core_req_tag_i   [HPDcacheCfg.u.nRequesters],
     input  hpdcache_pma_t                 core_req_pma_i   [HPDcacheCfg.u.nRequesters],
 
+    input  logic                          abort_cmo_inv_i,
+
     //      Core response interface
     input  logic                          core_rsp_valid_i,
     input  hpdcache_rsp_t                 core_rsp_i,
@@ -92,7 +94,7 @@ import hpdcache_pkg::*;
                    core_req_valid[gen_i]   = core_req_valid_i[gen_i],
                    core_req[gen_i]         = core_req_i[gen_i];
 
-            assign core_req_abort[gen_i]   = core_req_abort_i[gen_i],
+            assign core_req_abort[gen_i]   = core_req_abort_i[gen_i] | abort_cmo_inv_i,
                    core_req_tag[gen_i]     = core_req_tag_i[gen_i],
                    core_req_pma[gen_i]     = core_req_pma_i[gen_i];
         end
@@ -159,7 +161,7 @@ import hpdcache_pkg::*;
         else         arb_req_gnt_q <= arb_req_gnt_d;
     end
 
-    assign arb_req_valid_o = |arb_req_gnt_d;
+    assign arb_req_valid_o = (|arb_req_gnt_d) && !abort_cmo_inv_i;
     //  }}}
 
     //  Response demultiplexor

@@ -109,6 +109,8 @@ import hpdcache_pkg::*;
     // output  coherence_evict_t  coherence_evict_o,
     output  coherence_evict_t           coherence_evict_o,
     input   logic                       coherence_evict_ready_i,
+    output  logic                       abort_cmo_inv_o,
+
     //      Force the write buffer to send all pending writes
     input  logic                        wbuf_flush_i,
 
@@ -941,7 +943,7 @@ import hpdcache_pkg::*;
                     rstall          = 1'b1;
                     wstall          = 1'b1;
                     evict_stall     = 1'b1;
-                    inv_stall       = 1'b1;
+                    // inv_stall       = 1'b1;
                     // get_stall       = 1'b1;
                 end
                 HPDCACHE_MIA, HPDCACHE_EIA, HPDCACHE_SIA, HPDCACHE_IIA: begin
@@ -1344,7 +1346,7 @@ import hpdcache_pkg::*;
         if (coherence_act_q.update_line_state) begin
             write_dir_coherence = 1'b1;
             write_dir_coherence_wdata.coherence_state       = next_coherence_state_q;
-            write_dir_coherence_wdata.num_pending_inv_acks  = pending_inv_acks_q;    // TODO: check
+            // write_dir_coherence_wdata.num_pending_inv_acks  = pending_inv_acks_q;    // TODO: check
             write_dir_coherence_wdata.valid = !(next_coherence_state_q == HPDCACHE_INVALID);
             write_dir_coherence_wdata.wback = 1'b0; // wt by default for cachepool application
             write_dir_coherence_wdata.dirty = 1'b0; // disabled for wt mode
@@ -1390,6 +1392,7 @@ import hpdcache_pkg::*;
         coherence_act = '0;
         pending_inv_acks_d = pending_inv_acks_q;
         free_coherence = 1'b0;
+        abort_cmo_inv_o = 1'b0;
         // TODO:
         //pending_inv_acks_d = dir_coherence_gnt ? read_dir_coherence_rdata.num_pending_inv_acks : pending_inv_acks_q;
 
@@ -1558,7 +1561,7 @@ import hpdcache_pkg::*;
 
             HPDCACHE_ISD: begin
                 unique case(coherence_op)
-                    OP_READ, OP_WRITE, OP_EVICT, OP_INV: begin
+                    OP_READ, OP_WRITE, OP_EVICT: begin
                         coherence_act.stall             = 1'b1;
                         coherence_state_d               = HPDCACHE_ISD;
                     end
@@ -1576,6 +1579,12 @@ import hpdcache_pkg::*;
                         // coherence_act.update_line_state = 1'b1;
                         coherence_act.flush_wbuf        = 1'b1;
                         coherence_state_d               = HPDCACHE_ISD;
+                    end
+                    OP_INV: begin
+                        // coherence_act.update_line_state = 1'b1;
+                        coherence_act.send_inv_ack      = 1'b1;
+                        coherence_state_d               = HPDCACHE_ISD;
+                        abort_cmo_inv_o                 = 1'b1;
                     end
                     default: ;
                 endcase
