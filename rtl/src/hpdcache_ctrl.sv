@@ -893,6 +893,7 @@ import hpdcache_pkg::*;
         end else if ((coherence_write_complete && !read_dir_coherence_d) || 
                     fwd_tx_valid_o || 
                     (core_rsp_valid_o && st1_req_is_load) ||
+                    (coherence_act_q.hit && st1_req_is_store) ||
                     free_coherence_q) begin
         // coherence_act.hit || 
             coherence_busy_q <= coherence_act.stall ? 1'b1 : 1'b0;
