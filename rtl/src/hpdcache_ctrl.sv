@@ -550,6 +550,7 @@ import hpdcache_pkg::*;
     // logic                 evict_read, evict_read_q;
     // logic                 evict_by_core_req;
     logic                 core_req_is_rw;
+    logic                 fwd_busy, fwd_busy_q, fwd_busy_d;
 
     `FF(coherence_act_q, coherence_act, '0, clk_i, rst_ni)
     `FF(next_coherence_state_q, next_coherence_state, HPDCACHE_INVALID, clk_i, rst_ni)
@@ -867,21 +868,36 @@ import hpdcache_pkg::*;
     assign coherence_write_complete = dir_coherence_gnt_q && !coherence_read_served_q;
 
     always_comb begin
+        fwd_busy_d = fwd_busy_q;
+        // if (fwd_rx_i.fwd_msg_type != INV_ACK) begin
+        if (fwd_rx_valid_i && fwd_rx_ready_o) begin
+            fwd_busy_d = 1'b1;
+        end else if (fwd_tx_valid_o || free_coherence_q) begin
+            fwd_busy_d = 1'b0;
+        end
+        // end
+    end
+
+    assign fwd_busy = fwd_busy_d;
+    `FF(fwd_busy_q, fwd_busy_d, 1'b0, clk_i, rst_ni)
+
+    always_comb begin
         coherence_busy_d = coherence_busy_q;
         // if (write_dir_coherence || fwd_tx_valid_o || coherence_evict_o.valid) begin
         //     coherence_busy_d = coherence_act.stall ? 1'b1 : 1'b0;
         // end else 
         if (rstall || wstall || evict_stall || inv_stall) begin
             coherence_busy_d = 1'b0;
-            if (refill_write_dir_i && refill_core_rsp_valid_d) begin
+            // if (refill_write_dir_i && refill_core_rsp_valid_d) begin
+            if (refill_core_rsp_valid_d) begin
                 coherence_busy_d = 1'b1;
             end else if (op_decoded) begin
                 coherence_busy_d = 1'b1;
             end
-        end else if ((core_req_valid_i && core_req_is_rw) || 
+        end else if ((core_req_valid_i && core_req_ready_o && core_req_is_rw) || 
                     fwd_rx_valid_i || 
                     coherence_rsp_valid_i || 
-                    st1_req_updt_sel_victim ||
+                    // st1_req_updt_sel_victim ||
                     pending_core_req_d) begin
             coherence_busy_d = 1'b1;
         end
@@ -902,7 +918,7 @@ import hpdcache_pkg::*;
         end
     end
 
-    assign coherence_busy = coherence_busy_d;
+    assign coherence_busy = coherence_busy_q;
 
     always_comb begin : coherence_ready
         fwd_rx_ready_o              = 1'b0;
@@ -910,7 +926,7 @@ import hpdcache_pkg::*;
         coherence_core_req_ready    = 1'b0;
 
         // Fwd is sink with higher priority than req
-        if (!coherence_busy_q) begin
+        if (!coherence_busy) begin
             if (fwd_rx_valid_i && (!inv_stall || fwd_rx_i.fwd_msg_type == GET)) begin
                 fwd_rx_ready_o              = 1'b1;
                 if (fwd_rx_i.fwd_msg_type == INV &&
@@ -1139,7 +1155,8 @@ import hpdcache_pkg::*;
         
         // end else if (refill_core_rsp_valid_i) begin
         // end else if (refill_core_rsp_valid_d && dir_coherence_gnt_q) begin
-        end else if (fwd_rx_valid_d && coherence_read_served_q) begin
+        // end else if (fwd_rx_valid_d && coherence_read_served_q) begin
+        end else if (fwd_busy && coherence_read_served_q) begin
             // unique case (fwd_rx_q.fwd_msg_type)
             unique case (fwd_rx_d.fwd_msg_type)
                 INV: begin

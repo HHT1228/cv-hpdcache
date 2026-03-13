@@ -479,7 +479,7 @@ import hpdcache_pkg::*;
         // .core_req_abort_i                   (core_req_abort),
         .core_req_tag_i,
         .core_req_pma_i,
-        .abort_cmo_inv_i                    (abort_cmo_inv),
+        // .abort_cmo_inv_i                    (abort_cmo_inv),
 
         .core_rsp_valid_i                   (core_rsp_valid),
         .core_rsp_i                         (core_rsp),
