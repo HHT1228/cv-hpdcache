@@ -867,19 +867,32 @@ import hpdcache_pkg::*;
     assign core_req_is_rw = (core_req_i.op == HPDCACHE_REQ_LOAD) || (core_req_i.op == HPDCACHE_REQ_STORE);
     assign coherence_write_complete = dir_coherence_gnt_q && !coherence_read_served_q;
 
-    always_comb begin
+    always_comb begin : fwd_busy_comb
         fwd_busy_d = fwd_busy_q;
         // if (fwd_rx_i.fwd_msg_type != INV_ACK) begin
         if (fwd_rx_valid_i && fwd_rx_ready_o) begin
             fwd_busy_d = 1'b1;
-        end else if (fwd_tx_valid_o || free_coherence_q) begin
-            fwd_busy_d = 1'b0;
-        end
+        end 
+        
+        // else if (fwd_tx_valid_o || free_coherence_q) begin
+        //     fwd_busy_d = 1'b0;
+        // end
         // end
     end
 
+    always_ff @(posedge clk_i or negedge rst_ni) begin : fwd_busy_ff
+        if (!rst_ni) begin
+            fwd_busy_q <= 1'b0;
+        end else if (fwd_tx_valid_o || free_coherence_q) begin
+            fwd_busy_q <= 1'b0;
+        end else begin
+            fwd_busy_q <= fwd_busy_d;
+        end
+        
+    end
+
     assign fwd_busy = fwd_busy_d;
-    `FF(fwd_busy_q, fwd_busy_d, 1'b0, clk_i, rst_ni)
+    // `FF(fwd_busy_q, fwd_busy_d, 1'b0, clk_i, rst_ni)
 
     always_comb begin
         coherence_busy_d = coherence_busy_q;
@@ -1092,7 +1105,7 @@ import hpdcache_pkg::*;
             coherence_rsp_valid_d   = 1'b1;
             // fwd_rx_d                = fwd_rx_q;
             // fwd_rx_valid_d          = fwd_rx_valid_q;
-            core_req_valid_d        = 1'b0;
+            // core_req_valid_d        = 1'b0;
         end else if (fwd_rx_valid_i) begin
             // core_req_d              = core_req_q;
             // core_req_tag_d          = core_req_tag_q;
@@ -1100,7 +1113,7 @@ import hpdcache_pkg::*;
             // coherence_rsp_valid_d   = coherence_rsp_valid_q;
             fwd_rx_d                = fwd_rx_i;
             fwd_rx_valid_d          = 1'b1;
-            core_req_valid_d        = 1'b0;
+            // core_req_valid_d        = 1'b0;
         end else if (core_req_valid_i && core_req_ready_o) begin
             core_req_d              = core_req_i;
             core_req_tag_d          = core_req_i.addr_tag;
@@ -1369,7 +1382,8 @@ import hpdcache_pkg::*;
             write_dir_coherence_wdata.wback = 1'b0; // wt by default for cachepool application
             write_dir_coherence_wdata.dirty = 1'b0; // disabled for wt mode
             write_dir_coherence_wdata.fetch = 1'b0;
-            write_dir_coherence_wdata.tag   = st1_req_tag;  // TODO: check
+            // write_dir_coherence_wdata.tag   = st1_req_tag;  // TODO: check
+            write_dir_coherence_wdata.tag   = read_dir_coherence_tag_q;
         end
     end
 
@@ -1562,6 +1576,12 @@ import hpdcache_pkg::*;
                         coherence_act.update_line_state = 1'b1;
                         coherence_act.send_evict        = 1'b1;
                         coherence_state_d               = HPDCACHE_MIA;
+                    end
+                    // TODO: CONTINUE HERE
+                    OP_INV: begin
+                        coherence_act.update_line_state = 1'b1;
+                        coherence_act.send_inv_ack      = 1'b1;
+                        coherence_state_d               = HPDCACHE_INVALID;
                     end
                     OP_REPLACE: begin
                         coherence_act.send_to_dir       = 1'b1;
@@ -1758,7 +1778,7 @@ import hpdcache_pkg::*;
     assign evict_addr_offset    = st1_req.addr_offset;
 
     // TODO: might block the flow, need to test and see
-    always_comb begin
+    always_comb begin : coherence_dir_read
         read_dir_coherence_d = read_dir_coherence_q;
         read_dir_coherence_set_d = read_dir_coherence_set_q;
         read_dir_coherence_tag_d = read_dir_coherence_tag_q;
@@ -1793,7 +1813,7 @@ import hpdcache_pkg::*;
         end
     end
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin
+    always_ff @(posedge clk_i or negedge rst_ni) begin : coherence_dir_read_ff
         if (!rst_ni) begin
             read_dir_coherence_q <= 1'b0;
             read_dir_coherence_set_q <= '0;
@@ -1822,7 +1842,7 @@ import hpdcache_pkg::*;
     // assign write_dir_coherence_way = coherence_read_served_q ? coherence_rway : '0;
 
     // TODO: latch way, wdata, valid flag when no gnt
-    always_comb begin
+    always_comb begin : coherence_write_back
         write_dir_coherence_d = write_dir_coherence_q;
         write_dir_coherence_way_d = write_dir_coherence_way_q;
         write_dir_coherence_wdata_d = write_dir_coherence_wdata_q;
@@ -1843,7 +1863,7 @@ import hpdcache_pkg::*;
         end
     end
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin
+    always_ff @(posedge clk_i or negedge rst_ni) begin : coherence_write_back_ff
         if (!rst_ni) begin
             write_dir_coherence_q <= 1'b0;
             write_dir_coherence_way_q <= '0;
