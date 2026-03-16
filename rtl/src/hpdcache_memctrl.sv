@@ -218,7 +218,9 @@ import hpdcache_pkg::*;
     // TODO: consider removing inv_ack_cnt from directory entry to skim off these extra bits
     // localparam int unsigned COHERENCE_DIR_EXTEND_BITS = $bits(hpd_coherence_state_t)+$bits(inv_ack_cnt_t);
     localparam int unsigned COHERENCE_DIR_EXTEND_BITS = $bits(hpd_coherence_state_t);
+    localparam int unsigned HPDCACHE_DIR_TAG_BITS = $bits(hpdcache_tag_t);
     localparam int unsigned COHERENCE_DIR_EXTEND_BYTES = (COHERENCE_DIR_EXTEND_BITS + DIR_BYTE_SIZE - 32'd1) / DIR_BYTE_SIZE;
+    localparam int unsigned HPDCACHE_DIR_TAG_BYTES = (HPDCACHE_DIR_TAG_BITS + DIR_BYTE_SIZE - 32'd1) / DIR_BYTE_SIZE;
     localparam int unsigned HPDCACHE_DIR_RAM_BYTES = (HPDCACHE_DIR_RAM_WIDTH + DIR_BYTE_SIZE - 32'd1) / DIR_BYTE_SIZE;
 
     // typedef logic [HPDCACHE_DIR_RAM_ADDR_WIDTH-1:0] hpdcache_dir_addr_t;
@@ -519,10 +521,24 @@ import hpdcache_pkg::*;
             //     .rdata_o(dir_rentry[dir_w])
             // );
 
-            hpdcache_regbank_whbyteenable_1rw #(
+            // hpdcache_regbank_whbyteenable_1rw #(
+            //     .DATA_SIZE   (HPDCACHE_DIR_RAM_WIDTH),
+            //     .ADDR_SIZE   (HPDCACHE_DIR_RAM_ADDR_WIDTH)
+            //     // .BYTE_SIZE   (DIR_BYTE_SIZE)
+            // ) dir_sram (
+            //     .clk         (clk_i),
+            //     .rst_n       (rst_ni),
+            //     .cs          (served_dir_cs[dir_w]),
+            //     .we          (served_dir_we[dir_w]),
+            //     .addr        (served_dir_addr),
+            //     .wdata       (served_dir_wentry[dir_w]),
+            //     .wbyteenable (dir_wbe[dir_w]),
+            //     .rdata       (dir_rentry[dir_w])
+            // );
+
+            hpdcache_regbank_wmask_1rw #(
                 .DATA_SIZE   (HPDCACHE_DIR_RAM_WIDTH),
                 .ADDR_SIZE   (HPDCACHE_DIR_RAM_ADDR_WIDTH)
-                // .BYTE_SIZE   (DIR_BYTE_SIZE)
             ) dir_sram (
                 .clk         (clk_i),
                 .rst_n       (rst_ni),
@@ -530,7 +546,7 @@ import hpdcache_pkg::*;
                 .we          (served_dir_we[dir_w]),
                 .addr        (served_dir_addr),
                 .wdata       (served_dir_wentry[dir_w]),
-                .wbyteenable (dir_wbe[dir_w]),
+                .wmask       (dir_wmask[dir_w]),
                 .rdata       (dir_rentry[dir_w])
             );
         end
@@ -881,26 +897,31 @@ import hpdcache_pkg::*;
 
     assign coherence_dir_bank_gnt_o = coherence_dir_bank_gnt;
 
-    // for (genvar i = 0; i < HPDcacheCfg.u.ways; i++) begin
-    //     always_comb begin
-    //         dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}};
-    //         if (cache_dir_bank_gnt) begin
-    //             dir_wmask[i] = {{COHERENCE_DIR_EXTEND_BITS{1'b0}}, {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS{1'b1}}};
-    //         end 
-    //         // else if (coherence_dir_bank_gnt) begin
-    //         //     dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}, {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS{1'b0}}};
-    //         // end
-    //     end
-    // end
-
     for (genvar i = 0; i < HPDcacheCfg.u.ways; i++) begin
         always_comb begin
-            dir_wbe[i] = {HPDCACHE_DIR_RAM_BYTES{1'b1}};
+            dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}};
             if (cache_dir_bank_gnt) begin
-                dir_wbe[i] = {{COHERENCE_DIR_EXTEND_BYTES{1'b0}}, {HPDCACHE_DIR_RAM_BYTES-COHERENCE_DIR_EXTEND_BYTES{1'b1}}};
+                dir_wmask[i] = {{COHERENCE_DIR_EXTEND_BITS{1'b0}}, {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS{1'b1}}};
+            end else if (coherence_dir_bank_gnt) begin
+                dir_wmask[i] = {
+                                {COHERENCE_DIR_EXTEND_BITS+1{1'b1}},
+                                {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS-HPDCACHE_DIR_TAG_BITS-1{1'b0}},
+                                {HPDCACHE_DIR_TAG_BITS{1'b1}}
+                                };
             end
         end
     end
+
+    // for (genvar i = 0; i < HPDcacheCfg.u.ways; i++) begin
+    //     always_comb begin
+    //         dir_wbe[i] = {HPDCACHE_DIR_RAM_BYTES{1'b1}};
+    //         if (cache_dir_bank_gnt) begin
+    //             dir_wbe[i] = {{COHERENCE_DIR_EXTEND_BYTES{1'b0}}, {HPDCACHE_DIR_RAM_BYTES-COHERENCE_DIR_EXTEND_BYTES{1'b1}}};
+    //         end else if (coherence_dir_bank_gnt) begin
+    //             dir_wbe[i] = {{COHERENCE_DIR_EXTEND_BYTES{1'b1}}, {HPDCACHE_DIR_RAM_BYTES-COHERENCE_DIR_EXTEND_BYTES-HPDCACHE_DIR_TAG_BYTES{1'b0}}, {HPDCACHE_DIR_TAG_BYTES{1'b1}}};
+    //         end
+    //     end
+    // end
 
     // assign served_dir_addr = dir_addr_q;
     // assign served_dir_cs   = dir_cs_q;

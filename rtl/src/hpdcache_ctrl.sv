@@ -1378,7 +1378,10 @@ import hpdcache_pkg::*;
             write_dir_coherence = 1'b1;
             write_dir_coherence_wdata.coherence_state       = next_coherence_state_q;
             // write_dir_coherence_wdata.num_pending_inv_acks  = pending_inv_acks_q;    // TODO: check
-            write_dir_coherence_wdata.valid = !(next_coherence_state_q == HPDCACHE_INVALID);
+            // write_dir_coherence_wdata.valid = !(next_coherence_state_q == HPDCACHE_INVALID);
+             write_dir_coherence_wdata.valid =  (next_coherence_state_q != HPDCACHE_INVALID) &&
+                                                (next_coherence_state_q != HPDCACHE_ISD) &&
+                                                (next_coherence_state_q != HPDCACHE_IIA);
             write_dir_coherence_wdata.wback = 1'b0; // wt by default for cachepool application
             write_dir_coherence_wdata.dirty = 1'b0; // disabled for wt mode
             write_dir_coherence_wdata.fetch = 1'b0;
