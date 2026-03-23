@@ -54,6 +54,7 @@ import hpdcache_pkg::*;
 
     // Coherence support parameters
     parameter type inv_ack_cnt_t = logic,
+    parameter type hpdcache_coherence_t = logic,
     parameter type hpdcache_dir_addr_t = logic
 )
     //  }}}
@@ -184,10 +185,14 @@ import hpdcache_pkg::*;
     input  logic                                write_dir_coherence_i,
     input  hpdcache_dir_addr_t                  write_dir_coherence_set_i,
     input  hpdcache_way_vector_t                write_dir_coherence_way_i,
-    input  hpdcache_dir_entry_t                 write_dir_coherence_wdata_i,
-    output hpdcache_dir_entry_t                 read_dir_coherence_rdata_o,
-    output hpdcache_dir_entry_t                 coherence_evict_rdata_o,
+    // input  hpdcache_dir_entry_t                 write_dir_coherence_wdata_i,
+    input  hpdcache_coherence_t                 write_dir_coherence_wdata_i,
+    // output hpdcache_dir_entry_t                 read_dir_coherence_rdata_o,
+    output hpdcache_coherence_t                 read_dir_coherence_rdata_o,
+    // output hpdcache_dir_entry_t                 coherence_evict_rdata_o,
+    output hpdcache_coherence_t                 coherence_evict_rdata_o,
     output logic                                coherence_dir_bank_gnt_o,
+    output logic                                cache_dir_bank_gnt_o,
     output logic                                coherence_read_served_o,
     output hpdcache_way_vector_t                coherence_way_o
     // output logic [$clog2(HPDcacheCfg.u.ways)-1:0] way_id_o
@@ -385,19 +390,26 @@ import hpdcache_pkg::*;
     hpdcache_dir_addr_t                           coherence_dir_addr, served_dir_addr;
     hpdcache_way_vector_t                         coherence_dir_cs, served_dir_cs;
     hpdcache_way_vector_t                         coherence_dir_we, served_dir_we;
-    hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] coherence_dir_wentry, served_dir_wentry;
+    hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] served_dir_wentry;
     hpdcache_dir_mask_t  [HPDcacheCfg.u.ways-1:0] dir_wmask;
     hpdcache_dir_be_t    [HPDcacheCfg.u.ways-1:0] dir_wbe;
 
-    logic                                      cache_dir_bank_gnt, coherence_dir_bank_gnt, coherence_dir_bank_gnt_q;
+    logic                                      cache_dir_bank_gnt, cache_dir_bank_gnt_q;
+    logic                                      coherence_dir_bank_gnt, coherence_dir_bank_gnt_q;
 
     hpdcache_dir_addr_t                           dir_addr_q, dir_addr_d;
     hpdcache_way_vector_t                         dir_cs_q, dir_cs_d;
     hpdcache_way_vector_t                         dir_we_q, dir_we_d;
     hpdcache_dir_entry_t [HPDcacheCfg.u.ways-1:0] dir_wentry_q, dir_wentry_d;
-    hpdcache_way_vector_t                         coherence_victim_way;
+    hpdcache_way_vector_t                         coherence_victim_way, dir_victim_way;
 
-    `FF(coherence_dir_bank_gnt_q, coherence_dir_bank_gnt, 1'b0, clk_i, rst_ni)
+    hpdcache_coherence_t [HPDcacheCfg.u.ways-1:0] coherence_dir_wentry, coherence_dir_rentry;
+    
+    logic cache_init;
+
+    `FF(coherence_dir_bank_gnt_q, coherence_dir_bank_gnt_o, 1'b0, clk_i, rst_ni)
+    // `FF(cache_dir_bank_gnt_q, cache_dir_bank_gnt, 1'b0, clk_i, rst_ni)
+    assign cache_dir_bank_gnt_o = cache_dir_bank_gnt;
 
     //  Init FSM
     //  {{{
@@ -536,18 +548,46 @@ import hpdcache_pkg::*;
             //     .rdata       (dir_rentry[dir_w])
             // );
 
-            hpdcache_regbank_wmask_1rw #(
+            // hpdcache_regbank_wmask_1rw #(
+            //     .DATA_SIZE   (HPDCACHE_DIR_RAM_WIDTH),
+            //     .ADDR_SIZE   (HPDCACHE_DIR_RAM_ADDR_WIDTH)
+            // ) dir_sram (
+            //     .clk         (clk_i),
+            //     .rst_n       (rst_ni),
+            //     .cs          (served_dir_cs[dir_w]),
+            //     .we          (served_dir_we[dir_w]),
+            //     .addr        (served_dir_addr),
+            //     .wdata       (served_dir_wentry[dir_w]),
+            //     .wmask       (dir_wmask[dir_w]),
+            //     .rdata       (dir_rentry[dir_w])
+            // );
+
+            hpdcache_regbank_wbyteenable_1rw #(
                 .DATA_SIZE   (HPDCACHE_DIR_RAM_WIDTH),
                 .ADDR_SIZE   (HPDCACHE_DIR_RAM_ADDR_WIDTH)
             ) dir_sram (
                 .clk         (clk_i),
                 .rst_n       (rst_ni),
-                .cs          (served_dir_cs[dir_w]),
-                .we          (served_dir_we[dir_w]),
-                .addr        (served_dir_addr),
-                .wdata       (served_dir_wentry[dir_w]),
-                .wmask       (dir_wmask[dir_w]),
+                .cs          (dir_cs[dir_w]),
+                .we          (dir_we[dir_w]),
+                .addr        (dir_addr),
+                .wdata       (dir_wentry[dir_w]),
+                .wbyteenable ('1),
                 .rdata       (dir_rentry[dir_w])
+            );
+            
+            hpdcache_regbank_wbyteenable_1rw #(
+                .DATA_SIZE   (COHERENCE_DIR_EXTEND_BITS + HPDCACHE_DIR_TAG_BITS),
+                .ADDR_SIZE   (HPDCACHE_DIR_RAM_ADDR_WIDTH)
+            ) coherence_sram (
+                .clk         (clk_i),
+                .rst_n       (rst_ni),
+                .cs          (coherence_dir_cs[dir_w]),
+                .we          (coherence_dir_we[dir_w]),
+                .addr        (coherence_dir_addr),
+                .wdata       (coherence_dir_wentry[dir_w]),
+                .wbyteenable ('1),
+                .rdata       (coherence_dir_rentry[dir_w])
             );
         end
 
@@ -648,6 +688,7 @@ import hpdcache_pkg::*;
 
     always_comb
     begin : dir_ctrl_comb
+        cache_init  = 1'b0;
         unique case (1'b1)
             //  Cache directory initialization
             ~init_q: begin
@@ -655,6 +696,7 @@ import hpdcache_pkg::*;
                 dir_cs      = init_dir_cs;
                 dir_we      = '1;
                 dir_wentry  = '0;
+                cache_init  = 1'b1;
             end
 
             //  Cache directory match tag -> hit
@@ -713,7 +755,7 @@ import hpdcache_pkg::*;
 
                 for (hpdcache_uint i = 0; i < HPDcacheCfg.u.ways; i++) begin
                     dir_wentry[i] = '{
-                        coherence_state: HPDCACHE_INVALID,
+                        // coherence_state: HPDCACHE_INVALID,
                         // num_pending_inv_acks: '0,
                         valid: dir_cmo_updt_valid_i,
                         wback: dir_cmo_updt_wback_i,
@@ -732,7 +774,7 @@ import hpdcache_pkg::*;
 
                 for (hpdcache_uint i = 0; i < HPDcacheCfg.u.ways; i++) begin
                     dir_wentry[i] = '{
-                        coherence_state: HPDCACHE_INVALID,
+                        // coherence_state: HPDCACHE_INVALID,
                         // num_pending_inv_acks: '0,
                         valid: dir_updt_valid_i,
                         wback: dir_updt_wback_i,
@@ -775,7 +817,16 @@ import hpdcache_pkg::*;
         coherence_dir_we      = write_dir_coherence_i ? write_dir_coherence_way_i : '0;
         coherence_dir_wentry  = '{HPDcacheCfg.u.ways{write_dir_coherence_wdata_i}};
 
-        if (write_dir_coherence_i) begin
+        // TODO: restructure io and latching in ctrl to remove these
+        coherence_dir_bank_gnt_o = write_dir_coherence_i || read_dir_coherence_i;
+        coherence_read_served_o  = read_dir_coherence_i;
+
+        if (cache_init) begin
+            coherence_dir_addr   = init_set_q;
+            coherence_dir_cs     = init_dir_cs;
+            coherence_dir_we     = '1;
+            coherence_dir_wentry = {HPDCACHE_INVALID, '0};
+        end else if (write_dir_coherence_i) begin
             coherence_dir_addr   = write_dir_coherence_set_i;
         end else if (read_dir_coherence_i) begin
             coherence_dir_addr   = read_dir_coherence_set_i;
@@ -784,49 +835,49 @@ import hpdcache_pkg::*;
         end
     end
 
-    always_comb begin
-        dir_addr_d    = dir_addr_q;
-        dir_cs_d      = dir_cs_q;
-        dir_we_d      = dir_we_q;
-        dir_wentry_d  = dir_wentry_q;
+    // always_comb begin
+    //     dir_addr_d    = dir_addr_q;
+    //     dir_cs_d      = dir_cs_q;
+    //     dir_we_d      = dir_we_q;
+    //     dir_wentry_d  = dir_wentry_q;
 
-        // if (cache_dir_bank_gnt) begin
-        //     dir_addr_d    = '0;
-        //     dir_cs_d      = '0;
-        //     dir_we_d      = '0;
-        //     dir_wentry_d  = '0;
-        // end
-        if (dir_cs != '0) begin
-            dir_addr_d    = dir_addr;
-            dir_cs_d      = dir_cs;
-            dir_we_d      = dir_we;
-            dir_wentry_d  = dir_wentry;
-        end
-    end
+    //     // if (cache_dir_bank_gnt) begin
+    //     //     dir_addr_d    = '0;
+    //     //     dir_cs_d      = '0;
+    //     //     dir_we_d      = '0;
+    //     //     dir_wentry_d  = '0;
+    //     // end
+    //     if (dir_cs != '0) begin
+    //         dir_addr_d    = dir_addr;
+    //         dir_cs_d      = dir_cs;
+    //         dir_we_d      = dir_we;
+    //         dir_wentry_d  = dir_wentry;
+    //     end
+    // end
 
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-        if (!rst_ni) begin
-            dir_addr_q    <= '0;
-            dir_cs_q      <= '0;
-            dir_we_q      <= '0;
-            dir_wentry_q  <= '0;
-        // end else if (dir_cs != '0) begin
-        //     dir_addr_q    <= dir_addr;
-        //     dir_cs_q      <= dir_cs;
-        //     dir_we_q      <= dir_we;
-        //     dir_wentry_q  <= dir_wentry;
-        end else if (cache_dir_bank_gnt) begin
-            dir_addr_q    <= '0;
-            dir_cs_q      <= '0;
-            dir_we_q      <= '0;
-            dir_wentry_q  <= '0;
-        end else begin
-            dir_addr_q    <= dir_addr_d;
-            dir_cs_q      <= dir_cs_d;
-            dir_we_q      <= dir_we_d;
-            dir_wentry_q  <= dir_wentry_d;
-        end
-    end
+    // always_ff @(posedge clk_i or negedge rst_ni) begin
+    //     if (!rst_ni) begin
+    //         dir_addr_q    <= '0;
+    //         dir_cs_q      <= '0;
+    //         dir_we_q      <= '0;
+    //         dir_wentry_q  <= '0;
+    //     // end else if (dir_cs != '0) begin
+    //     //     dir_addr_q    <= dir_addr;
+    //     //     dir_cs_q      <= dir_cs;
+    //     //     dir_we_q      <= dir_we;
+    //     //     dir_wentry_q  <= dir_wentry;
+    //     end else if (cache_dir_bank_gnt) begin
+    //         dir_addr_q    <= '0;
+    //         dir_cs_q      <= '0;
+    //         dir_we_q      <= '0;
+    //         dir_wentry_q  <= '0;
+    //     end else begin
+    //         dir_addr_q    <= dir_addr_d;
+    //         dir_cs_q      <= dir_cs_d;
+    //         dir_we_q      <= dir_we_d;
+    //         dir_wentry_q  <= dir_wentry_d;
+    //     end
+    // end
 
 `ifndef NO_COHERENCE
     // Arbitrate directory read requests
@@ -864,53 +915,54 @@ import hpdcache_pkg::*;
     //     .coherence_gnt_o(coherence_dir_bank_gnt)
     // );
 
-    dir_access_arb #(
-        .NumWays                (HPDcacheCfg.u.ways),
+    // dir_access_arb #(
+    //     .NumWays                (HPDcacheCfg.u.ways),
 
-        .hpdcache_dir_addr_t    (hpdcache_dir_addr_t),
-        .hpdcache_way_vector_t  (hpdcache_way_vector_t),
-        .hpdcache_dir_entry_t   (hpdcache_dir_entry_t)
-    ) i_dir_access_arb (
-        .clk_i(clk_i),
-        .rst_ni(rst_ni),
+    //     .hpdcache_dir_addr_t    (hpdcache_dir_addr_t),
+    //     .hpdcache_way_vector_t  (hpdcache_way_vector_t),
+    //     .hpdcache_dir_entry_t   (hpdcache_dir_entry_t)
+    // ) i_dir_access_arb (
+    //     .clk_i(clk_i),
+    //     .rst_ni(rst_ni),
 
-        .comb_dir_addr_i(dir_addr_d),
-        .comb_dir_cs_i(dir_cs_d),
-        .comb_dir_we_i(dir_we_d),
-        .comb_dir_wentry_i(dir_wentry_d),
+    //     .comb_dir_addr_i            (dir_addr_d),
+    //     .comb_dir_cs_i              (dir_cs_d),
+    //     .comb_dir_we_i              (dir_we_d),
+    //     .comb_dir_wentry_i          (dir_wentry_d),
 
-        .coherence_req_i(read_dir_coherence_i || write_dir_coherence_i),
-        .coherence_dir_addr_i(coherence_dir_addr),
-        .coherence_dir_cs_i(coherence_dir_cs),
-        .coherence_dir_we_i(coherence_dir_we),
-        .coherence_dir_wentry_i(coherence_dir_wentry),
+    //     .coherence_req_i            (read_dir_coherence_i || write_dir_coherence_i),
+    //     .coherence_dir_addr_i       (coherence_dir_addr),
+    //     .coherence_dir_cs_i         (coherence_dir_cs),
+    //     .coherence_dir_we_i         (coherence_dir_we),
+    //     .coherence_dir_wentry_i     (coherence_dir_wentry),
 
-        .dir_addr_o(served_dir_addr),
-        .dir_cs_o(served_dir_cs),
-        .dir_we_o(served_dir_we),
-        .dir_wentry_o(served_dir_wentry),
+    //     .dir_addr_o                 (served_dir_addr),
+    //     .dir_cs_o                   (served_dir_cs),
+    //     .dir_we_o                   (served_dir_we),
+    //     .dir_wentry_o               (served_dir_wentry),
 
-        .comb_gnt_o(cache_dir_bank_gnt),
-        .coherence_gnt_o(coherence_dir_bank_gnt),
-        .coherence_read_served_o(coherence_read_served_o)
-    );
+    //     .comb_gnt_o                 (cache_dir_bank_gnt),
+    //     .coherence_gnt_o            (coherence_dir_bank_gnt),
+    //     .coherence_read_served_o    (coherence_read_served_o)
+    // );
 
-    assign coherence_dir_bank_gnt_o = coherence_dir_bank_gnt;
+    // assign coherence_dir_bank_gnt_o = coherence_dir_bank_gnt;
 
-    for (genvar i = 0; i < HPDcacheCfg.u.ways; i++) begin
-        always_comb begin
-            dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}};
-            if (cache_dir_bank_gnt) begin
-                dir_wmask[i] = {{COHERENCE_DIR_EXTEND_BITS{1'b0}}, {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS{1'b1}}};
-            end else if (coherence_dir_bank_gnt) begin
-                dir_wmask[i] = {
-                                {COHERENCE_DIR_EXTEND_BITS+1{1'b1}},
-                                {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS-HPDCACHE_DIR_TAG_BITS-1{1'b0}},
-                                {HPDCACHE_DIR_TAG_BITS{1'b1}}
-                                };
-            end
-        end
-    end
+    // for (genvar i = 0; i < HPDcacheCfg.u.ways; i++) begin
+    //     always_comb begin
+    //         dir_wmask[i] = {HPDCACHE_DIR_RAM_WIDTH{1'b1}};
+    //         if (cache_dir_bank_gnt && !cache_init) begin
+    //             dir_wmask[i] = {{COHERENCE_DIR_EXTEND_BITS{1'b0}}, {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS{1'b1}}};
+    //         end
+    //         else if (coherence_dir_bank_gnt) begin
+    //             dir_wmask[i] = {
+    //                             {COHERENCE_DIR_EXTEND_BITS+1{1'b1}},
+    //                             {HPDCACHE_DIR_RAM_WIDTH-COHERENCE_DIR_EXTEND_BITS-HPDCACHE_DIR_TAG_BITS-1{1'b0}},
+    //                             {HPDCACHE_DIR_TAG_BITS{1'b1}}
+    //                             };
+    //         end
+    //     end
+    // end
 
     // for (genvar i = 0; i < HPDcacheCfg.u.ways; i++) begin
     //     always_comb begin
@@ -977,7 +1029,8 @@ import hpdcache_pkg::*;
 
     // Return directory entry for coherence support
     // assign read_dir_coherence_rdata_o = read_dir_coherence_q ? dir_rentry[0] : '0;
-    hpdcache_dir_entry_t coherence_rentry;
+    // hpdcache_dir_entry_t coherence_rentry;
+    hpdcache_coherence_t coherence_rentry;
     hpdcache_tag_t [HPDcacheCfg.u.ways-1:0] coherence_dir_tags;
     // hpdcache_way_vector_t coherence_dir_hit_way;
     logic coherence_curr_line_hit;
@@ -992,7 +1045,8 @@ import hpdcache_pkg::*;
 
         for (int i = 0; i < int'(HPDcacheCfg.u.ways); i++) begin
             hpdcache_tag_t local_tag;
-            local_tag = dir_rentry[i].tag;
+            // local_tag = dir_rentry[i].tag;
+            local_tag = coherence_dir_rentry[i].tag;
 
             if (!coherence_curr_line_hit && 
                 (local_tag == read_dir_coherence_tag_d) &&
@@ -1000,7 +1054,8 @@ import hpdcache_pkg::*;
                 coherence_dir_bank_gnt_q) begin
                 coherence_curr_line_hit = 1'b1;
                 // coherence_dir_hit_way[i] = 1'b1;
-                coherence_rentry = dir_rentry[i];
+                // coherence_rentry = dir_rentry[i];
+                coherence_rentry = coherence_dir_rentry[i];
                 way_id = hpdcache_uint' (i);
             end
         end
@@ -1011,28 +1066,8 @@ import hpdcache_pkg::*;
     // assign coherence_way_o = 1'b1 << way_id;
     assign coherence_way_o = coherence_curr_line_hit ? coherence_hit_way : coherence_victim_way;
     assign read_dir_coherence_rdata_o = coherence_curr_line_hit ? coherence_rentry : '0;
-    assign coherence_evict_rdata_o = dir_rentry[coherence_victim_way];
-
-    hpdcache_victim_sel #(
-        .HPDcacheCfg              (HPDcacheCfg),
-        .hpdcache_set_t           (hpdcache_set_t),
-        .hpdcache_way_vector_t    (hpdcache_way_vector_t)
-    ) i_coherence_victim_sel (
-        .clk_i,
-        .rst_ni,
-
-        .updt_i                   (1'b0),
-        .updt_set_i               ('0),
-        .updt_way_i               ('0),
-
-        .sel_victim_i             (1'b0),       // Unused for PLRU
-        .sel_dir_valid_i          (dir_valid),
-        .sel_dir_wback_i          (dir_wback),
-        .sel_dir_dirty_i          (dir_dirty),
-        .sel_dir_fetch_i          (dir_fetch),
-        .sel_victim_set_i         (read_dir_coherence_set_i),
-        .sel_victim_way_o         (coherence_victim_way)
-    );
+    // assign coherence_evict_rdata_o = dir_rentry[coherence_victim_way];
+    assign coherence_evict_rdata_o = coherence_dir_rentry[coherence_victim_way];
 
     //  Directory hit logic
     //  {{{
@@ -1053,6 +1088,10 @@ import hpdcache_pkg::*;
         assign dir_hit_way_o[gen_i]                 = dir_valid[gen_i] & req_hit[gen_i];
         assign dir_cmo_check_nline_hit_way_o[gen_i] = dir_valid[gen_i] & cmo_hit[gen_i];
         assign dir_inval_hit_way[gen_i]             = dir_valid[gen_i] & inval_hit[gen_i];
+
+        // assign dir_hit_way_o[gen_i]                 = (dir_valid[gen_i] || dir_rentry[gen_i].coherence_state == HPDCACHE_ISD) & req_hit[gen_i];
+        // assign dir_cmo_check_nline_hit_way_o[gen_i] = (dir_valid[gen_i] || dir_rentry[gen_i].coherence_state == HPDCACHE_ISD) & cmo_hit[gen_i];
+        // assign dir_inval_hit_way[gen_i]             = (dir_valid[gen_i] || dir_rentry[gen_i].coherence_state == HPDCACHE_ISD) & inval_hit[gen_i];
     end
 
     hpdcache_mux #(
@@ -1120,7 +1159,37 @@ import hpdcache_pkg::*;
         assign dir_wback[gen_i] = dir_rentry[gen_i].wback;
         assign dir_dirty[gen_i] = dir_rentry[gen_i].dirty;
         assign dir_fetch[gen_i] = dir_rentry[gen_i].fetch;
+        // assign dir_valid[gen_i] = cache_dir_bank_gnt_q ? dir_rentry[gen_i].valid : 1'b0;
+        // assign dir_wback[gen_i] = cache_dir_bank_gnt_q ? dir_rentry[gen_i].wback : 1'b0;
+        // assign dir_dirty[gen_i] = cache_dir_bank_gnt_q ? dir_rentry[gen_i].dirty : 1'b0;
+        // assign dir_fetch[gen_i] = cache_dir_bank_gnt_q ? dir_rentry[gen_i].fetch : 1'b0;
     end
+
+    
+
+    hpdcache_victim_sel #(
+        .HPDcacheCfg              (HPDcacheCfg),
+        .hpdcache_set_t           (hpdcache_set_t),
+        .hpdcache_way_vector_t    (hpdcache_way_vector_t)
+    ) i_coherence_victim_sel (
+        .clk_i,
+        .rst_ni,
+
+        // .updt_i                   (1'b0),
+        // .updt_set_i               ('0),
+        // .updt_way_i               ('0),
+        .updt_i                   (updt_sel_victim),
+        .updt_set_i               (updt_sel_victim_set),
+        .updt_way_i               (updt_sel_victim_way),
+
+        .sel_victim_i             (1'b0),       // Unused for PLRU
+        .sel_dir_valid_i          (dir_valid),
+        .sel_dir_wback_i          (dir_wback),
+        .sel_dir_dirty_i          (dir_dirty),
+        .sel_dir_fetch_i          (dir_fetch),
+        .sel_victim_set_i         (read_dir_coherence_set_i),
+        .sel_victim_way_o         (coherence_victim_way)
+    );
 
 
     hpdcache_victim_sel #(
@@ -1141,8 +1210,44 @@ import hpdcache_pkg::*;
         .sel_dir_dirty_i          (dir_dirty),
         .sel_dir_fetch_i          (dir_fetch),
         .sel_victim_set_i         (dir_victim_set_i),
-        .sel_victim_way_o         (dir_victim_way_o)
+        // .sel_victim_way_o         (dir_victim_way_o)
+        .sel_victim_way_o         (dir_victim_way)
     );
+
+    // for (gen_i = 0; gen_i < int'(HPDcacheCfg.u.ways); gen_i++) begin : ISD_victim_bypass
+    //     // assign dir_tags[gen_i] = dir_rentry[gen_i].tag;
+
+    //     // assign req_hit[gen_i]   = (dir_tags[gen_i] == dir_match_tag_i);
+    //     // assign cmo_hit[gen_i]   = (dir_tags[gen_i] == dir_cmo_check_nline_tag_i);
+    //     // assign inval_hit[gen_i] = (dir_tags[gen_i] == dir_inval_tag);
+
+        // always_comb begin
+        //     dir_victim_way_o = dir_victim_way;
+        //     if (coherence_curr_line_hit) begin
+        //         dir_victim_way_o = coherence_hit_way;
+        //     end else if (dir_rentry[gen_i].tag == dir_match_tag_i &&
+        //                  dir_rentry[gen_i].coherence_state == HPDCACHE_ISD) begin
+        //         dir_victim_way_o = 1'b1 << gen_i;
+        //     end
+        // end
+    // end
+    // logic isd_hit;
+    // always_comb begin : ISD_victim_bypass
+    //     isd_hit = 1'b0;
+    //     // dir_victim_way_o = coherence_curr_line_hit ? coherence_hit_way : dir_victim_way;
+    //     dir_victim_way_o = dir_victim_way;
+
+    //     for (int i = 0; i < int'(HPDcacheCfg.u.ways); i++) begin
+    //         if (!isd_hit && 
+    //             (dir_rentry[i].tag == dir_match_tag_i) &&
+    //             (dir_rentry[i].coherence_state == HPDCACHE_ISD)) begin
+    //             isd_hit = 1'b1;
+    //             dir_victim_way_o = 1'b1 << i;
+    //         end
+    //     end
+    // end
+
+    assign dir_victim_way_o = coherence_curr_line_hit ? coherence_hit_way : dir_victim_way;
     //  }}}
 
     //  Data RAM request multiplexor

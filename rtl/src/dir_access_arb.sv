@@ -43,6 +43,7 @@ module dir_access_arb #(
   dir_req_pack_t comb_req_pack, coherence_req_pack, final_req_pack;
   // dir_req_pack_t [1:0] req_pack_combined;
   // logic req_valid;
+  logic merge_req, comb_gnt, coherence_gnt;
 
   assign comb_req_pack.dir_addr    = comb_dir_addr_i;
   assign comb_req_pack.dir_cs      = comb_dir_cs_i;
@@ -64,6 +65,11 @@ module dir_access_arb #(
 
   assign coherence_read_served_o = coherence_gnt_o && !(|(final_req_pack.dir_we));
 
+  // Hide latency by granting both requests if they are the same, the data can be shared
+  assign merge_req        = (comb_req_pack == coherence_req_pack);
+  assign comb_gnt_o       = merge_req ? 1'b1 : comb_gnt;
+  assign coherence_gnt_o  = merge_req ? 1'b1 : coherence_gnt;
+
   // assign req_valid = (comb_dir_cs_i != '0) || coherence_req_i;
 
   rr_arb_tree #(
@@ -76,10 +82,10 @@ module dir_access_arb #(
     .flush_i (1'b0),
     .rr_i    (1'b1),
     .req_i   ({(comb_dir_cs_i != '0), coherence_req_i}),  // valid_i
-    .gnt_o   ({comb_gnt_o, coherence_gnt_o}),  // ready_o
+    .gnt_o   ({comb_gnt, coherence_gnt}),                 // ready_o
     .data_i  ({comb_req_pack, coherence_req_pack}),
     .req_o   (),            // valid_o
-    .gnt_i   (1'b1),                           // ready_i
+    .gnt_i   (1'b1),                                      // ready_i
     .data_o  (final_req_pack),
     .idx_o   ()
   );

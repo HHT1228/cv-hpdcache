@@ -182,7 +182,7 @@ import hpdcache_pkg::*;
     //  {{{
     typedef struct packed {
         // CACHE_INVALID should be sync with valid bit
-        hpd_coherence_state_t   coherence_state;
+        // hpd_coherence_state_t   coherence_state;
         // inv_ack_cnt_t           num_pending_inv_acks;
 
         //  Cacheline state
@@ -205,6 +205,11 @@ import hpdcache_pkg::*;
         hpdcache_tag_t tag;
         //  }}}
     } hpdcache_dir_entry_t;
+
+    typedef struct packed {
+        hpd_coherence_state_t   coherence_state;
+        hpdcache_tag_t          tag;
+    } hpdcache_coherence_t;
     //  }}}
 
     typedef hpdcache_data_word_t [HPDcacheCfg.u.accessWords-1:0] hpdcache_access_data_t;
@@ -541,6 +546,7 @@ import hpdcache_pkg::*;
         .inv_ack_cnt_t                      (inv_ack_cnt_t),
         .hpdcache_coherence_rsp_t           (hpdcache_coherence_rsp_t),
         // .hpdcache_coherence_req_t           (hpdcache_coherence_req_t)
+        .hpdcache_coherence_t             (hpdcache_coherence_t),
         .coherence_evict_t         (coherence_evict_t)
     ) hpdcache_ctrl_i(
         .clk_i,
