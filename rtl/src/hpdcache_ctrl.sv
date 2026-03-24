@@ -1224,7 +1224,9 @@ import hpdcache_pkg::*;
             op_decoded = 1'b1;
         // end else if (core_req_valid_q && dir_coherence_gnt) begin
         // end else if (core_req_valid_d && dir_coherence_gnt_q) begin
-        end else if (st1_dir_victim_valid && st2_dir_updt_d && !evict_stall) begin
+        end else if (st1_dir_victim_valid && st2_dir_updt_d &&
+                     (st1_dir_victim_tag == st2_dir_updt_tag_q) && 
+                     !evict_stall) begin
             coherence_op = coherence_busy_q ? OP_REPLACE : OP_EVICT;
             op_decoded   = 1'b1;
         end else if (core_req_valid_d && coherence_read_served_q && !core_req_stall) begin
@@ -1404,13 +1406,68 @@ import hpdcache_pkg::*;
     //     end
     // end
 
+    // Hold write to coherence reg bank when MSHR full and/or not properly allocated
+    logic                   __write_dir_coherence_q, __write_dir_coherence_d;
+    hpdcache_coherence_t    __write_dir_coherence_wdata_q, __write_dir_coherence_wdata_d;
+    logic                   write_held_d, write_held_q, release_held_write, release_held_write_q;
+
+    always_comb begin : hold_write_for_victim_way
+        __write_dir_coherence_wdata_d   = __write_dir_coherence_wdata_q;
+        write_held_d                    = write_held_q;
+
+        if ((write_dir_coherence_way_d == '0 || st1_dir_victim_way == '0) &&
+            (coherence_act_q.update_line_state && write_dir_coherence_wdata.coherence_state == HPDCACHE_ISD)) begin
+            __write_dir_coherence_wdata_d   = write_dir_coherence_wdata;
+            write_held_d                    = 1'b1;
+        end
+    end
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin : hold_write_for_victim_way_ff
+        if (!rst_ni) begin
+            __write_dir_coherence_wdata_q   <= '0;
+            write_held_q                    <= 1'b0;
+        end else if (release_held_write_q) begin
+            __write_dir_coherence_wdata_q   <= '0;
+            write_held_q                    <= 1'b0;
+        end else begin
+            __write_dir_coherence_wdata_q   <= __write_dir_coherence_wdata_d;
+            write_held_q                    <= write_held_d;
+        end
+    end
+
+    assign release_held_write = write_held_q && (write_dir_coherence_way_d != '0) &&
+                                (st1_dir_victim_way != '0) && st1_dir_victim_tag != '0;
+
+    always_ff @(posedge clk_i or negedge rst_ni) begin : release_held_write_ff
+        if (!rst_ni) begin
+            release_held_write_q <= 1'b0;
+        end else if (release_held_write && write_dir_coherence) begin
+            release_held_write_q <= 1'b0;
+        end else begin
+            release_held_write_q <= release_held_write;
+        end
+    end
+    // `FF(release_held_write_q, release_held_write, 1'b0, clk_i, rst_ni)
+
     always_comb begin : hpd_act_update_state
         write_dir_coherence = 1'b0;
         write_dir_coherence_wdata = '0;
 
         if (coherence_act_q.update_line_state) begin
-            write_dir_coherence = 1'b1;
-            write_dir_coherence_wdata.coherence_state       = next_coherence_state_q;
+            // if (release_held_write_q) begin
+            //     write_dir_coherence = 1'b1;
+            //     write_dir_coherence_wdata = __write_dir_coherence_wdata_q;
+            // end else begin
+            //     write_dir_coherence = (write_dir_coherence_way_d != '0) &&
+            //                             (st1_dir_victim_way != '0);
+            //     write_dir_coherence_wdata.coherence_state   = next_coherence_state_q;
+            //     write_dir_coherence_wdata.tag               = read_dir_coherence_tag_q;
+            // end
+
+            // write_dir_coherence = 1'b1;
+            write_dir_coherence = (write_dir_coherence_way_d != '0);
+            write_dir_coherence_wdata.coherence_state   = next_coherence_state_q;
+            write_dir_coherence_wdata.tag               = read_dir_coherence_tag_q;
             // write_dir_coherence_wdata.num_pending_inv_acks  = pending_inv_acks_q;    // TODO: check
             // write_dir_coherence_wdata.valid = !(next_coherence_state_q == HPDCACHE_INVALID);
             //  write_dir_coherence_wdata.valid =  (next_coherence_state_q != HPDCACHE_INVALID) &&
@@ -1420,7 +1477,9 @@ import hpdcache_pkg::*;
             // write_dir_coherence_wdata.dirty = 1'b0; // disabled for wt mode
             // write_dir_coherence_wdata.fetch = 1'b0;
             // write_dir_coherence_wdata.tag   = st1_req_tag;  // TODO: check
-            write_dir_coherence_wdata.tag   = read_dir_coherence_tag_q;
+        end else if (release_held_write_q) begin
+            write_dir_coherence = 1'b1;
+            write_dir_coherence_wdata = __write_dir_coherence_wdata_q;
         end
     end
 
@@ -1811,17 +1870,22 @@ import hpdcache_pkg::*;
     hpdcache_req_offset_t   fwd_rx_addr_offset, evict_addr_offset;
     assign fwd_rx_addr_tag      = fwd_rx_i.addr[HPDcacheCfg.u.paWidth-1:HPDcacheCfg.reqOffsetWidth];
     assign fwd_rx_addr_offset   = fwd_rx_i.addr[HPDcacheCfg.reqOffsetWidth-1:0];
-    assign evict_addr_tag       = st1_req.addr_tag;
-    assign evict_addr_offset    = st1_req.addr_offset;
+    // assign evict_addr_tag       = st1_req.addr_tag;
+    // assign evict_addr_offset    = st1_req.addr_offset;
+    assign evict_addr_tag       = st2_dir_updt_tag_q;
+    assign evict_addr_set       = st2_dir_updt_set_q;
 
     // TODO: might block the flow, need to test and see
     always_comb begin : coherence_dir_read
         read_dir_coherence_d = read_dir_coherence_q;
         read_dir_coherence_set_d = read_dir_coherence_set_q;
         read_dir_coherence_tag_d = read_dir_coherence_tag_q;
-        if (st1_dir_victim_valid && st2_dir_updt_d && !evict_stall) begin
+        if (st1_dir_victim_valid && st2_dir_updt_d &&
+            (st1_dir_victim_tag == st2_dir_updt_tag_q) && 
+            !evict_stall) begin
             read_dir_coherence_d = 1'b1;
-            read_dir_coherence_set_d = evict_addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
+            // read_dir_coherence_set_d = evict_addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
+            read_dir_coherence_set_d = evict_addr_set;
             read_dir_coherence_tag_d = evict_addr_tag;
             // evict_read = 1'b1;
         end else if (coherence_rsp_valid_i && coherence_rsp_ready_o) begin
