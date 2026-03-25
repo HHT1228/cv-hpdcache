@@ -565,6 +565,7 @@ import hpdcache_pkg::*;
     `FF(dir_coherence_gnt_q, dir_coherence_gnt, 1'b0, clk_i, rst_ni)
     `FF(free_coherence_q, free_coherence, 1'b0, clk_i, rst_ni)
     `FF(coherence_read_served_q, coherence_read_served, 1'b0, clk_i, rst_ni)
+    `FF(pending_inv_acks_q, pending_inv_acks_d, 0, clk_i, rst_ni)
     // `FF(evict_read_q, evict_read, 1'b0, clk_i, rst_ni)
     // `FF(coherence_refill_ready_q, coherence_refill_ready, 1'b0, clk_i, rst_ni)
     
@@ -952,9 +953,10 @@ import hpdcache_pkg::*;
                     fwd_tx_valid_o || 
                     (core_rsp_valid_o && st1_req_is_load && !refill_core_rsp_valid_d) ||
                     (coherence_act_q.hit && st1_req_is_store) ||
-                    free_coherence_q) begin
+                    free_coherence_q || coherence_act.stall) begin
         // coherence_act.hit || 
-            coherence_busy_q <= coherence_act.stall ? 1'b1 : 1'b0;
+            // coherence_busy_q <= coherence_act.stall ? 1'b1 : 1'b0;
+            coherence_busy_q <= 1'b0;
         end else begin
             coherence_busy_q <= coherence_busy_d;
         end
@@ -1006,7 +1008,7 @@ import hpdcache_pkg::*;
                 HPDCACHE_ISD: begin
                     // rstall          = 1'b1;
                     // wstall          = 1'b1;
-                    evict_stall     = 1'b1;
+                    // evict_stall     = 1'b1;
                     // inv_stall       = 1'b1;
                     // get_stall       = 1'b1;
                 end
@@ -1015,8 +1017,8 @@ import hpdcache_pkg::*;
                     wstall          = 1'b1;
                 end
                 HPDCACHE_SMA: begin
-                    wstall          = 1'b1;
-                    evict_stall     = 1'b1;
+                    // wstall          = 1'b1;
+                    // evict_stall     = 1'b1;
                 end
                 default: begin
                     rstall          = 1'b0;
@@ -1119,13 +1121,13 @@ import hpdcache_pkg::*;
     end
 
     always_comb begin
-        core_req_d = core_req_q;
-        core_req_tag_d = core_req_tag_q;
-        coherence_rsp_d = coherence_rsp_q;
-        coherence_rsp_valid_d = coherence_rsp_valid_q;
-        fwd_rx_d = fwd_rx_q;
-        fwd_rx_valid_d = fwd_rx_valid_q;
-        core_req_valid_d = core_req_valid_q;
+        core_req_d              = core_req_q;
+        core_req_tag_d          = core_req_tag_q;
+        coherence_rsp_d         = coherence_rsp_q;
+        coherence_rsp_valid_d   = coherence_rsp_valid_q;
+        fwd_rx_d                = fwd_rx_q;
+        fwd_rx_valid_d          = fwd_rx_valid_q;
+        core_req_valid_d        = core_req_valid_q;
 
         refill_core_rsp_d       = refill_core_rsp_q;
         refill_core_rsp_valid_d = refill_core_rsp_valid_q;
@@ -1166,7 +1168,7 @@ import hpdcache_pkg::*;
         // coherence_tid = core_req_q.tid;
         coherence_sid = core_req_d.sid;
         coherence_tid = core_req_d.tid;
-        pending_inv_acks = '0;
+        // pending_inv_acks = '0;
         op_decoded = 1'b0;
         // evict_by_core_req = 1'b0;
 
@@ -1224,9 +1226,12 @@ import hpdcache_pkg::*;
             op_decoded = 1'b1;
         // end else if (core_req_valid_q && dir_coherence_gnt) begin
         // end else if (core_req_valid_d && dir_coherence_gnt_q) begin
-        end else if (st1_dir_victim_valid && st2_dir_updt_d &&
-                     (st1_dir_victim_tag == st2_dir_updt_tag_q) && 
-                     !evict_stall) begin
+        // end else if (st1_dir_victim_valid && st2_dir_updt_d &&
+        //              (st1_dir_victim_tag == st2_dir_updt_tag_q) && 
+        //              !evict_stall) begin
+        end else if (st1_dir_victim_valid && write_dir_coherence &&
+                    (st1_dir_victim_way == write_dir_coherence_way_d) &&
+                     write_dir_coherence_wdata.tag != coherence_evict_rdata.tag) begin
             coherence_op = coherence_busy_q ? OP_REPLACE : OP_EVICT;
             op_decoded   = 1'b1;
         end else if (core_req_valid_d && coherence_read_served_q && !core_req_stall) begin
@@ -1257,15 +1262,15 @@ import hpdcache_pkg::*;
 
 
     // TODO: latch inv ack meta, compare and count on receiving new ack
-    always_ff @(posedge clk_i or negedge rst_ni) begin
-        if(!rst_ni) begin
-            pending_inv_acks_q <= '0;
-        // end else if (coherence_rsp_q.is_inv_ack_cnt) begin
-        //     pending_inv_acks_q <= coherence_rsp_q.inv_ack_cnt;
-        end else begin 
-            pending_inv_acks_q <= pending_inv_acks_d;
-        end
-    end
+    // always_ff @(posedge clk_i or negedge rst_ni) begin
+    //     if(!rst_ni) begin
+    //         pending_inv_acks_q <= '0;
+    //     // end else if (coherence_rsp_q.is_inv_ack_cnt) begin
+    //     //     pending_inv_acks_q <= coherence_rsp_q.inv_ack_cnt;
+    //     end else begin 
+    //         pending_inv_acks_q <= pending_inv_acks_d;
+    //     end
+    // end
 
     // assign pending_inv_acks_d = pending_inv_acks_q;
 
@@ -1302,15 +1307,18 @@ import hpdcache_pkg::*;
         if (coherence_act.send_inv_ack) begin
             fwd_tx_valid_d          = 1'b1;
             // fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
-            fwd_tx_d.addr           = fwd_rx_d.addr;
+            // fwd_tx_d.addr           = fwd_rx_d.addr;
+            fwd_tx_d.addr           = fwd_rx_q.addr;
             fwd_tx_d.fwd_msg_type   = INV_ACK;
             fwd_tx_d.line_state     = next_coherence_state;
-            fwd_tx_d.new_owner      = fwd_rx_d.new_owner;
+            // fwd_tx_d.new_owner      = fwd_rx_d.new_owner;
+            fwd_tx_d.new_owner      = fwd_rx_q.new_owner;
             fwd_tx_d.num_inv_ack    = 1;
         end else if (coherence_act.send_get_ack) begin
             fwd_tx_valid_d          = 1'b1;
             // fwd_tx_d.addr           = {core_req_tag_d, core_req_d.addr_offset};
-            fwd_tx_d.addr           = fwd_rx_d.addr;
+            // fwd_tx_d.addr           = fwd_rx_d.addr;
+            fwd_tx_d.addr           = fwd_rx_q.addr;
             fwd_tx_d.fwd_msg_type   = GET_ACK;
             // fwd_tx_d.line_state     = next_coherence_state;
             fwd_tx_d.line_state     = current_state;
@@ -1373,7 +1381,8 @@ import hpdcache_pkg::*;
             coherence_evict_d.valid       = 1'b1;
             // coherence_evict_d.addr_tag    = st1_dir_victim_tag;
             // coherence_evict_d.addr        = {st1_req.addr_tag, st1_req.addr_offset};
-            coherence_evict_d.addr        = {coherence_evict_rdata.tag, st1_req.addr_offset};
+            // coherence_evict_d.addr        = {coherence_evict_rdata.tag, st1_req.addr_offset};
+            coherence_evict_d.addr        = {st1_victim_nline, write_dir_coherence_set};
             coherence_evict_d.core_id     = '0; // HPD doesn't know, handle in tile
         end
     end
@@ -1466,8 +1475,9 @@ import hpdcache_pkg::*;
 
             // write_dir_coherence = 1'b1;
             write_dir_coherence = (write_dir_coherence_way_d != '0);
-            write_dir_coherence_wdata.coherence_state   = next_coherence_state_q;
-            write_dir_coherence_wdata.tag               = read_dir_coherence_tag_q;
+            write_dir_coherence_wdata.coherence_state       = next_coherence_state_q;
+            write_dir_coherence_wdata.num_pending_inv_acks  = pending_inv_acks_q;
+            write_dir_coherence_wdata.tag                   = read_dir_coherence_tag_q;
             // write_dir_coherence_wdata.num_pending_inv_acks  = pending_inv_acks_q;    // TODO: check
             // write_dir_coherence_wdata.valid = !(next_coherence_state_q == HPDCACHE_INVALID);
             //  write_dir_coherence_wdata.valid =  (next_coherence_state_q != HPDCACHE_INVALID) &&
@@ -1516,9 +1526,11 @@ import hpdcache_pkg::*;
     always_comb begin : coherence_logic
         // Default: hold
         current_state = coherence_state_q;
+        pending_inv_acks = read_dir_coherence_rdata.num_pending_inv_acks;
         coherence_state_d = restore_aft_get_q? __coherence_state_q : coherence_state_q;
         coherence_act = '0;
-        pending_inv_acks_d = pending_inv_acks_q;
+        // pending_inv_acks_d = pending_inv_acks_q;
+        pending_inv_acks_d = '0;
         free_coherence = 1'b0;
         abort_cmo_inv_o = 1'b0;
         // TODO:
@@ -1555,20 +1567,27 @@ import hpdcache_pkg::*;
                     // Unusual behavior, realted to how eviction is handled.
                     OP_INV_ACK_CNT: begin
                         pending_inv_acks_d              = coherence_rsp_d.inv_ack_cnt;
+                        coherence_act.update_line_state = 1'b1;
                         free_coherence = 1'b1;
                     end
                     OP_INV_ACK: begin
-                        if (pending_inv_acks_q == fwd_rx_d.num_inv_ack) begin
+                        // if (pending_inv_acks_q == fwd_rx_d.num_inv_ack) begin
+                        if (pending_inv_acks <= fwd_rx_d.num_inv_ack) begin
                             coherence_act.update_line_state = 1'b0;
                             coherence_state_d               = HPDCACHE_INVALID;
                         end
-                        pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
+                        // pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
+                        pending_inv_acks_d              = pending_inv_acks - fwd_rx_d.num_inv_ack;
                         free_coherence                  = 1'b1;
                     end
                     // Lines could be I in L1 but M in L2 due to write-through behavior
                     OP_INV: begin
                         coherence_act.send_inv_ack      = 1'b1;
                         coherence_state_d               = HPDCACHE_INVALID;
+                    end
+                    OP_EVICT_ACK: begin         // do nothing as line already replaced
+                        // avoiding busy wait
+                        free_coherence = 1'b1;
                     end
                     default: ;
                 endcase
@@ -1595,6 +1614,7 @@ import hpdcache_pkg::*;
                         // coherence_act.update_line_state = 1'b1;
                         coherence_act.send_evict        = 1'b1;
                         coherence_state_d               = HPDCACHE_SHARED;
+                        free_coherence                  = 1'b1;
                     end
                     OP_EVICT_ACK: begin         // do nothing as line already replaced
                         // avoiding busy wait
@@ -1607,6 +1627,7 @@ import hpdcache_pkg::*;
                     end
                     OP_INV_ACK_CNT: begin
                         pending_inv_acks_d              = coherence_rsp_d.inv_ack_cnt;
+                        coherence_act.update_line_state = 1'b1;
                         free_coherence = 1'b1;
                     end
                     default: ;
@@ -1645,6 +1666,7 @@ import hpdcache_pkg::*;
                         // coherence_act.update_line_state = 1'b1;
                         coherence_act.send_evict        = 1'b1;
                         coherence_state_d               = HPDCACHE_EXCLUSIVE;
+                        free_coherence                  = 1'b1;
                     end
                     OP_EVICT_ACK: begin         // do nothing as line already replaced
                         // avoiding busy wait
@@ -1684,6 +1706,7 @@ import hpdcache_pkg::*;
                         // coherence_act.update_line_state = 1'b1;
                         coherence_act.send_evict        = 1'b1;
                         coherence_state_d               = HPDCACHE_MODIFIED;
+                        free_coherence                  = 1'b1;
                     end
                     OP_EVICT_ACK: begin         // do nothing as line already replaced
                         // avoiding busy wait
@@ -1720,6 +1743,17 @@ import hpdcache_pkg::*;
                         coherence_state_d               = HPDCACHE_ISD;
                         abort_cmo_inv_o                 = 1'b1;
                     end
+                    OP_REPLACE: begin
+                        coherence_act.send_to_dir       = 1'b1;
+                        // coherence_act.update_line_state = 1'b1;
+                        coherence_act.send_evict        = 1'b1;
+                        coherence_state_d               = HPDCACHE_ISD;
+                        free_coherence                  = 1'b1;
+                    end
+                    OP_EVICT_ACK: begin         // do nothing as line already replaced
+                        // avoiding busy wait
+                        free_coherence = 1'b1;
+                    end
                     default: ;
                 endcase
             end
@@ -1741,15 +1775,18 @@ import hpdcache_pkg::*;
                     end
                     OP_INV_ACK_CNT: begin
                         pending_inv_acks_d              = coherence_rsp_d.inv_ack_cnt;
+                        coherence_act.update_line_state = 1'b1;
                         free_coherence = 1'b1;
                     end
                     OP_INV_ACK: begin
-                        if (pending_inv_acks_q == fwd_rx_d.num_inv_ack) begin
+                        // if (pending_inv_acks_q == fwd_rx_d.num_inv_ack) begin
+                        if (pending_inv_acks == fwd_rx_d.num_inv_ack) begin
                             coherence_act.update_line_state = 1'b1;
                             coherence_state_d               = HPDCACHE_MODIFIED;
                             free_coherence                  = 1'b1;
                         end
-                        pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
+                        // pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
+                        pending_inv_acks_d              = pending_inv_acks - fwd_rx_d.num_inv_ack;
                     end
                     // OP_LAST_INV_ACK: begin
                     //     coherence_act.update_line_state = 1'b1;

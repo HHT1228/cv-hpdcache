@@ -221,8 +221,8 @@ import hpdcache_pkg::*;
     localparam int unsigned DATA_BYTE_SIZE = 32'd8;
     // This contaminates inv_ack_cnt field, but inv_ack_cnt is never used in practice
     // TODO: consider removing inv_ack_cnt from directory entry to skim off these extra bits
-    // localparam int unsigned COHERENCE_DIR_EXTEND_BITS = $bits(hpd_coherence_state_t)+$bits(inv_ack_cnt_t);
-    localparam int unsigned COHERENCE_DIR_EXTEND_BITS = $bits(hpd_coherence_state_t);
+    localparam int unsigned COHERENCE_DIR_EXTEND_BITS = $bits(hpd_coherence_state_t)+$bits(inv_ack_cnt_t);
+    // localparam int unsigned COHERENCE_DIR_EXTEND_BITS = $bits(hpd_coherence_state_t);
     localparam int unsigned HPDCACHE_DIR_TAG_BITS = $bits(hpdcache_tag_t);
     localparam int unsigned COHERENCE_DIR_EXTEND_BYTES = (COHERENCE_DIR_EXTEND_BITS + DIR_BYTE_SIZE - 32'd1) / DIR_BYTE_SIZE;
     localparam int unsigned HPDCACHE_DIR_TAG_BYTES = (HPDCACHE_DIR_TAG_BITS + DIR_BYTE_SIZE - 32'd1) / DIR_BYTE_SIZE;
@@ -576,7 +576,7 @@ import hpdcache_pkg::*;
                 .rdata       (dir_rentry[dir_w])
             );
             
-            hpdcache_regbank_wbyteenable_1rw #(
+            hpdcache_regbank_wmask_1rw #(
                 .DATA_SIZE   (COHERENCE_DIR_EXTEND_BITS + HPDCACHE_DIR_TAG_BITS),
                 .ADDR_SIZE   (HPDCACHE_DIR_RAM_ADDR_WIDTH)
             ) coherence_sram (
@@ -586,7 +586,7 @@ import hpdcache_pkg::*;
                 .we          (coherence_dir_we[dir_w]),
                 .addr        (coherence_dir_addr),
                 .wdata       (coherence_dir_wentry[dir_w]),
-                .wbyteenable ('1),
+                .wmask       ('1),
                 .rdata       (coherence_dir_rentry[dir_w])
             );
         end
@@ -825,7 +825,14 @@ import hpdcache_pkg::*;
             coherence_dir_addr   = init_set_q;
             coherence_dir_cs     = init_dir_cs;
             coherence_dir_we     = '1;
-            coherence_dir_wentry = {HPDCACHE_INVALID, '0};
+            coherence_dir_wentry = {HPDcacheCfg.u.ways
+                                    {HPDCACHE_INVALID,
+                                    {$bits(inv_ack_cnt_t){1'b0}},
+                                    {HPDcacheCfg.tagWidth{1'b0}}}
+                                    };
+            // coherence_dir_wentry.coherence_state        = HPDCACHE_INVALID;
+            // coherence_dir_wentry.num_pending_inv_acks   = '0;
+            // coherence_dir_wentry.tag                    = '0;
         end else if (write_dir_coherence_i) begin
             coherence_dir_addr   = write_dir_coherence_set_i;
         end else if (read_dir_coherence_i) begin
@@ -1034,7 +1041,7 @@ import hpdcache_pkg::*;
     hpdcache_tag_t [HPDcacheCfg.u.ways-1:0] coherence_dir_tags;
     // hpdcache_way_vector_t coherence_dir_hit_way;
     logic coherence_curr_line_hit;
-    logic [$clog2(HPDcacheCfg.u.ways)-1:0] way_id;
+    logic [$clog2(HPDcacheCfg.u.ways)-1:0] way_id, coherence_victim_way_id;
     hpdcache_way_vector_t coherence_hit_way;
 
     always_comb begin
@@ -1042,6 +1049,8 @@ import hpdcache_pkg::*;
         way_id = '0;
         coherence_rentry = '0;
         // coherence_dir_hit_way = '0;
+
+        coherence_victim_way_id = '0;
 
         for (int i = 0; i < int'(HPDcacheCfg.u.ways); i++) begin
             hpdcache_tag_t local_tag;
@@ -1058,6 +1067,10 @@ import hpdcache_pkg::*;
                 coherence_rentry = coherence_dir_rentry[i];
                 way_id = hpdcache_uint' (i);
             end
+
+            if (coherence_victim_way[i]) begin
+                coherence_victim_way_id = hpdcache_uint' (i);
+            end
         end
     end
 
@@ -1067,7 +1080,8 @@ import hpdcache_pkg::*;
     assign coherence_way_o = coherence_curr_line_hit ? coherence_hit_way : coherence_victim_way;
     assign read_dir_coherence_rdata_o = coherence_curr_line_hit ? coherence_rentry : '0;
     // assign coherence_evict_rdata_o = dir_rentry[coherence_victim_way];
-    assign coherence_evict_rdata_o = coherence_dir_rentry[coherence_victim_way];
+    // assign coherence_victim_way_id = 1'b1 << coherence_victim_way;
+    assign coherence_evict_rdata_o = coherence_dir_rentry[coherence_victim_way_id];
 
     //  Directory hit logic
     //  {{{

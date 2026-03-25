@@ -208,6 +208,7 @@ import hpdcache_pkg::*;
 
     typedef struct packed {
         hpd_coherence_state_t   coherence_state;
+        inv_ack_cnt_t           num_pending_inv_acks;
         hpdcache_tag_t          tag;
     } hpdcache_coherence_t;
     //  }}}
