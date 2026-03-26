@@ -191,6 +191,7 @@ import hpdcache_pkg::*;
     output hpdcache_coherence_t                 read_dir_coherence_rdata_o,
     // output hpdcache_dir_entry_t                 coherence_evict_rdata_o,
     output hpdcache_coherence_t                 coherence_evict_rdata_o,
+    output logic                                coherence_dir_hit_o,
     output logic                                coherence_dir_bank_gnt_o,
     output logic                                cache_dir_bank_gnt_o,
     output logic                                coherence_read_served_o,
@@ -409,7 +410,7 @@ import hpdcache_pkg::*;
 
     `FF(coherence_dir_bank_gnt_q, coherence_dir_bank_gnt_o, 1'b0, clk_i, rst_ni)
     // `FF(cache_dir_bank_gnt_q, cache_dir_bank_gnt, 1'b0, clk_i, rst_ni)
-    assign cache_dir_bank_gnt_o = cache_dir_bank_gnt;
+    // assign cache_dir_bank_gnt_o = cache_dir_bank_gnt;
 
     //  Init FSM
     //  {{{
@@ -617,7 +618,7 @@ import hpdcache_pkg::*;
                         .ByteWidth (DATA_BYTE_SIZE              ),
                         .NumPorts  (1                           ),
                         .Latency   (1                           ),
-                        .PrintSimCfg(1                          ),
+                        .PrintSimCfg(0                          ),
                         .SimInit   ("zeros"                     )
                         // .impl_in_t (impl_in_t                   )
                     ) data_sram (
@@ -1007,7 +1008,7 @@ import hpdcache_pkg::*;
         //     // Load
         //     read_dir_coherence_q      <= read_dir_coherence_i;
         //     read_dir_coherence_tag_q  <= read_dir_coherence_tag_i;
-        end else if (read_dir_coherence_d && coherence_dir_bank_gnt) begin
+        end else if (read_dir_coherence_d && coherence_dir_bank_gnt_o) begin
             // Clear after read is served
             read_dir_coherence_q      <= 1'b0;
             read_dir_coherence_tag_q  <= read_dir_coherence_tag_d;
@@ -1058,8 +1059,8 @@ import hpdcache_pkg::*;
             local_tag = coherence_dir_rentry[i].tag;
 
             if (!coherence_curr_line_hit && 
-                (local_tag == read_dir_coherence_tag_d) &&
-                (read_dir_coherence_tag_d != '0) &&
+                (local_tag == read_dir_coherence_tag_q) &&
+                (read_dir_coherence_tag_q != '0) &&
                 coherence_dir_bank_gnt_q) begin
                 coherence_curr_line_hit = 1'b1;
                 // coherence_dir_hit_way[i] = 1'b1;
@@ -1082,6 +1083,7 @@ import hpdcache_pkg::*;
     // assign coherence_evict_rdata_o = dir_rentry[coherence_victim_way];
     // assign coherence_victim_way_id = 1'b1 << coherence_victim_way;
     assign coherence_evict_rdata_o = coherence_dir_rentry[coherence_victim_way_id];
+    assign coherence_dir_hit_o = coherence_curr_line_hit;
 
     //  Directory hit logic
     //  {{{
