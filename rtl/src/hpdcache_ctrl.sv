@@ -525,7 +525,7 @@ import hpdcache_pkg::*;
     logic                  write_dir_coherence, write_dir_coherence_q, write_dir_coherence_d;
     // hpdcache_dir_entry_t   write_dir_coherence_wdata, write_dir_coherence_wdata_q, write_dir_coherence_wdata_d;
     hpdcache_coherence_t   write_dir_coherence_wdata, write_dir_coherence_wdata_q, write_dir_coherence_wdata_d;
-    hpdcache_dir_addr_t    write_dir_coherence_set;
+    hpdcache_dir_addr_t    write_dir_coherence_set, write_dir_coherence_set_q;
     hpdcache_way_vector_t  write_dir_coherence_way, write_dir_coherence_way_q, write_dir_coherence_way_d;
     // logic [$clog2(HPDcacheCfg.u.ways)-1:0] coherence_rway, coherence_rway_d, coherence_rway_q;
     hpdcache_way_vector_t  coherence_rway, coherence_rway_q;
@@ -583,6 +583,8 @@ import hpdcache_pkg::*;
     `FF(refill_read_q, refill_read, 1'b0, clk_i, rst_ni)
     `FF(fwd_read_q, fwd_read, 1'b0, clk_i, rst_ni)
     `FF(core_req_read_q, core_req_read, 1'b0, clk_i, rst_ni)
+
+    `FF(write_dir_coherence_set_q, write_dir_coherence_set, '0, clk_i, rst_ni)
     
     // localparam int unsigned HPDCACHE_DIR_RAM_ADDR_WIDTH = $clog2(HPDcacheCfg.u.sets);
     // typedef logic [HPDCACHE_DIR_RAM_ADDR_WIDTH-1:0] hpdcache_dir_addr_t;
@@ -1037,16 +1039,16 @@ import hpdcache_pkg::*;
                 coherence_core_req_ready    = 1'b1;
             end
         end 
-        // else if (!write_dir_coherence_d && 
-        //          !fwd_busy_q && 
-        //          !refill_busy_q && 
-        //          !coherence_act.update_line_state &&
-        //          coherence_act.hit) begin
-        //     if (core_req_valid_i && core_req_is_rw) begin
-        //         coherence_core_req_ready    = 1'b1;
-        //         low_latency_dir_read = 1'b1;
-        //     end
-        // end
+        else if (!write_dir_coherence_d && 
+                 !fwd_busy_q && 
+                 !refill_busy_q && 
+                 !coherence_act.update_line_state &&
+                 coherence_act.hit) begin
+            if (core_req_valid_i && core_req_is_rw) begin
+                coherence_core_req_ready    = 1'b1;
+                low_latency_dir_read = 1'b1;
+            end
+        end
     end
 
     always_comb begin : rwe_stall   // READ WRITE EVICT stall
@@ -1154,6 +1156,7 @@ import hpdcache_pkg::*;
         end else if (op_decoded) begin
             refill_core_rsp_q       <= refill_core_rsp_d;
             refill_core_rsp_valid_q <= 1'b0;
+            fwd_rx_q                <= fwd_rx_d;
 
             coherence_rsp_valid_q   <= 1'b0;
         end else if (op_decoded && !pending_core_req_d) begin
@@ -2060,6 +2063,7 @@ import hpdcache_pkg::*;
         // end else if (core_req_valid_i && core_req_ready_o && !core_req_stall) begin
         end else if (pending_core_req_d && !core_req_stall) begin
             read_dir_coherence_d = 1'b1;
+            // if (!coherence_busy_q) begin
             if (!coherence_busy_q || low_latency_dir_read) begin
                 read_dir_coherence_set_d = core_req_i.addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
                 read_dir_coherence_tag_d = core_req_i.addr_tag;
@@ -2494,8 +2498,10 @@ import hpdcache_pkg::*;
         .read_dir_coherence_set_i      (read_dir_coherence_set_d),      // addr (R)
         .read_dir_coherence_tag_i      (read_dir_coherence_tag_d),
         .write_dir_coherence_i         (write_dir_coherence_d),           // we
-        .write_dir_coherence_set_i     (write_dir_coherence_set),       // addr (W)
-        .write_dir_coherence_way_i     (write_dir_coherence_way_d),       // cs
+        // .write_dir_coherence_set_i     (write_dir_coherence_set),       // addr (W)
+        .write_dir_coherence_set_i     (write_dir_coherence_set_q),       // addr (W)
+        // .write_dir_coherence_way_i     (write_dir_coherence_way_d),       // cs
+        .write_dir_coherence_way_i     (write_dir_coherence_way_q),       // cs
         .write_dir_coherence_wdata_i   (write_dir_coherence_wdata_d),     // wentry
         .read_dir_coherence_rdata_o    (read_dir_coherence_rdata),    // rentry
         .coherence_evict_rdata_o       (coherence_evict_rdata),
