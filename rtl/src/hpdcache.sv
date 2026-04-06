@@ -206,10 +206,13 @@ import hpdcache_pkg::*;
         //  }}}
     } hpdcache_dir_entry_t;
 
+    // typedef logic[1:0] interleave_offset_t;
+
     typedef struct packed {
         hpd_coherence_state_t   coherence_state;
         inv_ack_cnt_t           num_pending_inv_acks;
         hpdcache_tag_t          tag;
+        // logic[1:0]              interleave_offset;
     } hpdcache_coherence_t;
     //  }}}
 

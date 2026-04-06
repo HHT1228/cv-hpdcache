@@ -245,6 +245,12 @@ import hpdcache_pkg::*;
     logic                    mshr_empty;
     //  }}}
 
+    // Coherence support signals
+    // logic                    refill_data_exclusive, refill_data_exclusive_q;
+    logic mem_rsp_data_exc, refill_data_exc;
+    logic refill_data_exc_valid;
+    logic pop_data_exc;
+
     //  Miss Request FSM
     //  {{{
     always_comb
@@ -578,8 +584,25 @@ import hpdcache_pkg::*;
     assign refill_core_rsp.tid     = refill_core_rsp_tid;
     assign refill_core_rsp.error   = refill_core_rsp_error;
     assign refill_core_rsp.aborted = 1'b0;
-    
-    assign refill_core_rsp.data_exclusive = mem_resp_i.data_exclusive;  // Could be dangerous
+
+    assign mem_rsp_data_exc = mem_resp_i.data_exclusive;
+    // TODO: replace with deeper FIFO if intense refill traffic is expected
+    spill_register #(
+        .T      (logic),
+        .Bypass (1'b0)
+    ) i_spill_reg_data_exc (
+        .clk_i   (clk_i),
+        .rst_ni  (rst_ni),
+        .valid_i (mem_resp_valid_i),
+        .ready_o (/* unused */),
+        .data_i  (mem_rsp_data_exc),
+        .valid_o (refill_data_exc_valid),
+        .ready_i (refill_core_rsp_valid_o),
+        .data_o  (refill_data_exc)
+    );
+
+    // assign refill_core_rsp.data_exclusive = mem_resp_i.data_exclusive;
+    assign refill_core_rsp.data_exclusive = refill_data_exc_valid ? refill_data_exc : 1'b0;
 
     hpdcache_fifo_reg #(
         .FIFO_DEPTH  (1),

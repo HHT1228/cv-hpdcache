@@ -532,7 +532,7 @@ import hpdcache_pkg::*;
     logic                  coherence_dir_hit, coherence_dir_hit_q;
 
     coherence_evict_t coherence_evict_d, coherence_evict_q;
-    logic             coherence_replace, coherence_replace_q;
+    logic             coherence_replace, coherence_replace_q, coherence_replace_d, replace_ready;
     cache_dir_fwd_t            fwd_tx_d, fwd_tx_q;
     logic                      fwd_tx_valid_d, fwd_tx_valid_q;
 
@@ -567,6 +567,8 @@ import hpdcache_pkg::*;
     logic replace_read, rsp_read, refill_read, fwd_read, core_req_read;
     logic replace_read_q, rsp_read_q, refill_read_q, fwd_read_q, core_req_read_q;
 
+    // logic [1:0] current_int_offset;
+
     `FF(coherence_act_q, coherence_act, '0, clk_i, rst_ni)
     `FF(next_coherence_state_q, next_coherence_state, HPDCACHE_INVALID, clk_i, rst_ni)
     `FF(dir_coherence_gnt_q, dir_coherence_gnt, 1'b0, clk_i, rst_ni)
@@ -578,7 +580,7 @@ import hpdcache_pkg::*;
     // `FF(evict_read_q, evict_read, 1'b0, clk_i, rst_ni)
     // `FF(coherence_refill_ready_q, coherence_refill_ready, 1'b0, clk_i, rst_ni)
 
-    `FF(replace_read_q, replace_read, 1'b0, clk_i, rst_ni)
+    // `FF(replace_read_q, replace_read, 1'b0, clk_i, rst_ni)
     `FF(rsp_read_q, rsp_read, 1'b0, clk_i, rst_ni)
     `FF(refill_read_q, refill_read, 1'b0, clk_i, rst_ni)
     `FF(fwd_read_q, fwd_read, 1'b0, clk_i, rst_ni)
@@ -923,7 +925,8 @@ import hpdcache_pkg::*;
 
     always_comb begin : refill_busy_comb
         refill_busy_d = refill_busy_q;
-        if (refill_req_valid_i && refill_req_ready_o) begin
+        // if (refill_req_valid_i && refill_req_ready_o) begin
+        if (refill_write_dir_i && refill_core_rsp_valid_d) begin
             refill_busy_d = 1'b1;
         end
     end
@@ -1018,9 +1021,10 @@ import hpdcache_pkg::*;
         coherence_rsp_ready_o       = 1'b0;
         coherence_core_req_ready    = 1'b0;
         low_latency_dir_read        = 1'b0;
+        replace_ready               = 1'b0;
         // coherence_refill_ready      = 1'b0;
         // Fwd is sink with higher priority than req
-        if (!coherence_busy && !write_dir_coherence_d && !fwd_busy_q && !refill_busy_q) begin
+        if (!coherence_busy && !write_dir_coherence_d && !fwd_busy_q && !refill_busy_d) begin
             // if (refill_core_rsp_valid_d) begin
             //     coherence_refill_ready = 1'b1;
             // end else 
@@ -1035,13 +1039,19 @@ import hpdcache_pkg::*;
                 end
             end else if (coherence_rsp_valid_i) begin
                 coherence_rsp_ready_o       = 1'b1;
-            end else if (core_req_valid_i && !core_req_stall) begin
+            end 
+            // else if (coherence_replace_d) begin
+            //     replace_ready = 1'b1;
+            // end 
+            else if (core_req_valid_i && !core_req_stall) begin
                 coherence_core_req_ready    = 1'b1;
             end
+            
         end 
+        // FIXME: comb loop
         else if (!write_dir_coherence_d && 
                  !fwd_busy_q && 
-                 !refill_busy_q && 
+                 !refill_busy_d && 
                  !coherence_act.update_line_state &&
                  coherence_act.hit) begin
             if (core_req_valid_i && core_req_is_rw) begin
@@ -1192,9 +1202,12 @@ import hpdcache_pkg::*;
         refill_core_rsp_d       = refill_core_rsp_q;
         refill_core_rsp_valid_d = refill_core_rsp_valid_q;
         if (refill_core_rsp_valid_i) begin
+        // if (refill_write_dir_i && refill_core_rsp_valid_d) begin
             refill_core_rsp_d       = refill_core_rsp_i;
             refill_core_rsp_valid_d = 1'b1;
-        end else if (coherence_rsp_valid_i) begin
+        end
+        
+        if (coherence_rsp_valid_i && coherence_rsp_ready_o) begin
             // core_req_d              = core_req_q;
             // core_req_tag_d          = core_req_tag_q;
             coherence_rsp_d         = coherence_rsp_i;
@@ -1202,7 +1215,9 @@ import hpdcache_pkg::*;
             // fwd_rx_d                = fwd_rx_q;
             // fwd_rx_valid_d          = fwd_rx_valid_q;
             // core_req_valid_d        = 1'b0;
-        end else if (fwd_rx_valid_i) begin
+        end
+        
+        if (fwd_rx_valid_i && fwd_rx_ready_o) begin
             // core_req_d              = core_req_q;
             // core_req_tag_d          = core_req_tag_q;
             // coherence_rsp_d         = coherence_rsp_q;
@@ -1210,7 +1225,9 @@ import hpdcache_pkg::*;
             fwd_rx_d                = fwd_rx_i;
             fwd_rx_valid_d          = 1'b1;
             // core_req_valid_d        = 1'b0;
-        end else if (core_req_valid_i && core_req_ready_o) begin
+        end 
+        
+        if (core_req_valid_i && core_req_ready_o) begin
             core_req_d              = core_req_i;
             core_req_tag_d          = core_req_i.addr_tag;
             // coherence_rsp_d         = coherence_rsp_q;
@@ -1296,6 +1313,7 @@ import hpdcache_pkg::*;
         //             (st1_dir_victim_way == write_dir_coherence_way_d) &&
         //              write_dir_coherence_wdata.tag != coherence_evict_rdata.tag) begin
         end else if (coherence_replace_q) begin
+        // end else if (coherence_replace_q && replace_ready) begin
         // end else if (coherence_replace) begin
             // coherence_op = coherence_busy_q ? OP_REPLACE : OP_EVICT;
             coherence_op = OP_REPLACE;
@@ -1304,7 +1322,7 @@ import hpdcache_pkg::*;
         // end else if (core_req_valid_d && coherence_read_served_q && !core_req_stall) begin
         end else if (core_req_read_q && coherence_read_served_q) begin
             // unique case (core_req_q.op)
-            unique case (core_req_d.op)
+            unique case (core_req_q.op)
                 HPDCACHE_REQ_LOAD: begin
                     coherence_op = OP_READ;
                     op_decoded = 1'b1;
@@ -1333,6 +1351,26 @@ import hpdcache_pkg::*;
                                 write_dir_coherence_wdata.tag != coherence_evict_rdata.tag;
     `FF(coherence_replace_q, coherence_replace, 1'b0, clk_i, rst_ni)
     `FF(coherence_evict_rdata_q, coherence_evict_rdata, '0, clk_i, rst_ni)
+
+    // always_comb begin : replace_decision
+    //     coherence_replace_d = coherence_replace_q;
+
+    //     if (st1_dir_victim_valid && write_dir_coherence_d &&
+    //         (st1_dir_victim_way == write_dir_coherence_way_d) &&
+    //         (write_dir_coherence_wdata.tag != coherence_evict_rdata_q.tag)) begin
+    //         coherence_replace_d = 1'b1;
+    //     end
+    // end
+
+    // always_ff @(posedge clk_i or negedge rst_ni) begin
+    //     if (!rst_ni) begin
+    //         coherence_replace_q <= 1'b0;
+    //     end else if (replace_ready) begin
+    //         coherence_replace_q <= 1'b0;
+    //     end else begin
+    //         coherence_replace_q <= coherence_replace_d;
+    //     end
+    // end
 
     // TODO: latch inv ack meta, compare and count on receiving new ack
     // always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -1457,7 +1495,7 @@ import hpdcache_pkg::*;
             // coherence_evict_d.addr        = {coherence_evict_rdata.tag, st1_req.addr_offset};
             // TODO: check this if something goes wrong, might need latching
             coherence_evict_d.addr        = {st1_victim_nline, write_dir_coherence_set};
-            coherence_evict_d.core_id     = '0; // HPD doesn't know, handle in tile
+            // coherence_evict_d.addr        = {coherence_evict_rdata_q.tag, read_dir_coherence_set_q, write_dir_coherence_set};
             coherence_evict_d.is_replace  = coherence_op == OP_REPLACE;
         end
     end
@@ -1542,6 +1580,43 @@ import hpdcache_pkg::*;
     end
     // `FF(release_held_write_q, release_held_write, 1'b0, clk_i, rst_ni)
 
+    hpdcache_tag_t wdata_tag;
+    logic          wdata_tag_valid, push_tag, wtag_fifo_full, wtag_fifo_empty;
+
+    assign push_tag = replace_read || rsp_read || fwd_read || core_req_read || refill_read;
+
+    spill_register #(
+        .T      (hpdcache_tag_t),
+        .Bypass (1'b0)
+    ) i_spill_reg_wtag (
+        .clk_i   (clk_i),
+        .rst_ni  (rst_ni),
+        .valid_i (coherence_act.update_line_state),
+        .ready_o (/* unused */),
+        .data_i  (read_dir_coherence_tag_q),
+        .valid_o (wdata_tag_valid),
+        .ready_i (coherence_act_q.update_line_state),
+        .data_o  (wdata_tag)
+    );
+
+    // fifo_v3 #(
+    //   .FALL_THROUGH(1'b0),
+    //   .DATA_WIDTH($bits(hpdcache_tag_t)),  // +1 for valid bit
+    //   .DEPTH(2)
+    // ) i_fifo_wtag (
+    //   .clk_i      (clk_i),
+    //   .rst_ni     (rst_ni),
+    //   .flush_i    (1'b0),
+    //   .testmode_i (1'b0),
+    //   .full_o     (wtag_fifo_full),
+    //   .empty_o    (wtag_fifo_empty),
+    //   .usage_o    (/* unused */),
+    //   .data_i     (read_dir_coherence_tag_d),
+    //   .push_i     (push_tag && !wtag_fifo_full),
+    //   .data_o     (wdata_tag),
+    //   .pop_i      (coherence_act_q.update_line_state && !wtag_fifo_empty)
+    // );
+
     always_comb begin : hpd_act_update_state
         write_dir_coherence = 1'b0;
         write_dir_coherence_wdata = '0;
@@ -1562,7 +1637,9 @@ import hpdcache_pkg::*;
             // write_dir_coherence = st1_dir_victim_way != '0;
             write_dir_coherence_wdata.coherence_state       = next_coherence_state_q;
             write_dir_coherence_wdata.num_pending_inv_acks  = pending_inv_acks_q;
-            write_dir_coherence_wdata.tag                   = read_dir_coherence_tag_q;
+            // write_dir_coherence_wdata.tag                   = read_dir_coherence_tag_q;
+            write_dir_coherence_wdata.tag                   = wdata_tag_valid ? wdata_tag : read_dir_coherence_tag_q;
+            // write_dir_coherence_wdata.interleave_offset     = 
             // write_dir_coherence_wdata.num_pending_inv_acks  = pending_inv_acks_q;    // TODO: check
             // write_dir_coherence_wdata.valid = !(next_coherence_state_q == HPDCACHE_INVALID);
             //  write_dir_coherence_wdata.valid =  (next_coherence_state_q != HPDCACHE_INVALID) &&
@@ -2030,17 +2107,20 @@ import hpdcache_pkg::*;
         refill_read     = 1'b0;
         fwd_read        = 1'b0;
         core_req_read   = 1'b0;
-        if (st1_dir_victim_valid && st2_dir_updt_d &&
-            (st1_dir_victim_tag == st2_dir_updt_tag_q) && 
-            !evict_stall) begin
-            read_dir_coherence_d = 1'b1;
-            // read_dir_coherence_set_d = evict_addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
-            read_dir_coherence_set_d = evict_addr_set;
-            read_dir_coherence_tag_d = evict_addr_tag;
-            // evict_read = 1'b1;
+        // if (st1_dir_victim_valid && st2_dir_updt_d &&
+        //     (st1_dir_victim_tag == st2_dir_updt_tag_q) && 
+        //     !evict_stall) begin
+        // if (coherence_replace_d && replace_ready && !evict_stall) begin
+        // if (coherence_replace && !evict_stall) begin
+        //     read_dir_coherence_d = 1'b1;
+        //     // read_dir_coherence_set_d = evict_addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
+        //     read_dir_coherence_set_d = evict_addr_set;
+        //     read_dir_coherence_tag_d = evict_addr_tag;
+        //     // evict_read = 1'b1;
 
-            replace_read = 1'b1;
-        end else if (coherence_rsp_valid_i && coherence_rsp_ready_o) begin
+        //     replace_read = 1'b1;
+        // end else 
+        if (coherence_rsp_valid_i && coherence_rsp_ready_o) begin
             read_dir_coherence_d = 1'b1;
             read_dir_coherence_set_d = coherence_rsp_i.addr_offset[HPDcacheCfg.reqOffsetWidth-1 -: HPDCACHE_DIR_RAM_ADDR_WIDTH];
             read_dir_coherence_tag_d = coherence_rsp_i.addr_tag;
