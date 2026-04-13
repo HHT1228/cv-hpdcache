@@ -843,6 +843,22 @@ import hpdcache_pkg::*;
         end
     end
 
+    // always @(posedge clk_i) begin
+    //     assert(coherence_dir_addr == 6'h09 && coherence_dir_we[1]) begin
+    //         $info("[DEBUG] coherence write to set 0x09 way 1 (way vector 4'h2) at time %0t", $time);
+    //     end else begin
+    //         // No action
+    //     end
+    // end
+
+    // always @(posedge clk_i) begin
+    //     assert(dir_addr == 6'h09 && dir_we[1]) begin
+    //         $info("[DEBUG] cache ctrl write to set 0x09 way 1 (way vector 4'h2) at time %0t", $time);
+    //     end else begin
+    //         // No action
+    //     end
+    // end
+
     // always_comb begin
     //     dir_addr_d    = dir_addr_q;
     //     dir_cs_d      = dir_cs_q;

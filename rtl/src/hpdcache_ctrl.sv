@@ -1047,13 +1047,22 @@ import hpdcache_pkg::*;
                 coherence_core_req_ready    = 1'b1;
             end
             
-        end 
-        // FIXME: comb loop
-        else if (!write_dir_coherence_d && 
+        end else if (!write_dir_coherence_d && 
                  !fwd_busy_q && 
                  !refill_busy_d && 
                  !coherence_act.update_line_state &&
                  coherence_act.hit) begin
+            // FIXME: comb loop
+            if (fwd_rx_valid_i && (!inv_stall || fwd_rx_i.fwd_msg_type == GET)) begin
+                fwd_rx_ready_o              = 1'b1;
+                // if (fwd_rx_i.fwd_msg_type == INV &&
+                //     core_req_valid_i && 
+                //     !core_req_stall && 
+                //     core_req_i.op == HPDCACHE_REQ_CMO_INVAL_NLINE) begin
+                //     // INV CMO can be handled together with coherence INV without conflict
+                //     coherence_core_req_ready = 1'b1;
+                // end
+            end else 
             if (core_req_valid_i && core_req_is_rw) begin
                 coherence_core_req_ready    = 1'b1;
                 low_latency_dir_read = 1'b1;
@@ -1287,7 +1296,7 @@ import hpdcache_pkg::*;
         // end else if (fwd_busy && coherence_read_served_q) begin
         end else if (fwd_read_q && coherence_read_served_q) begin
             // unique case (fwd_rx_q.fwd_msg_type)
-            unique case (fwd_rx_d.fwd_msg_type)
+            unique case (fwd_rx_q.fwd_msg_type)
                 INV: begin
                     coherence_op = OP_INV;          // Might be redundant
                 end
@@ -1731,15 +1740,18 @@ import hpdcache_pkg::*;
                     OP_INV_ACK_CNT: begin
                         pending_inv_acks_d              = coherence_rsp_d.inv_ack_cnt;
                         coherence_act.update_line_state = 1'b1;
+                        coherence_state_d               = HPDCACHE_INVALID;
                         free_coherence = 1'b1;
                     end
                     OP_INV_ACK: begin
                         // if (pending_inv_acks_q == fwd_rx_d.num_inv_ack) begin
-                        if (pending_inv_acks <= fwd_rx_d.num_inv_ack) begin
-                            coherence_act.update_line_state = 1'b0;
-                            coherence_state_d               = HPDCACHE_INVALID;
-                        end
+                        // if (pending_inv_acks <= fwd_rx_d.num_inv_ack) begin
+                        //     coherence_act.update_line_state = 1'b0;
+                        //     coherence_state_d               = HPDCACHE_INVALID;
+                        // end
                         // pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
+                        coherence_act.update_line_state = 1'b1;
+                        coherence_state_d               = HPDCACHE_INVALID;
                         pending_inv_acks_d              = pending_inv_acks - fwd_rx_d.num_inv_ack;
                         free_coherence                  = 1'b1;
                     end
@@ -1801,6 +1813,7 @@ import hpdcache_pkg::*;
                     end
                     OP_INV_ACK_CNT: begin
                         pending_inv_acks_d              = coherence_rsp_d.inv_ack_cnt;
+                        coherence_state_d               = HPDCACHE_SHARED;
                         coherence_act.update_line_state = 1'b1;
                         free_coherence = 1'b1;
                     end
@@ -1963,10 +1976,12 @@ import hpdcache_pkg::*;
                     OP_INV_ACK: begin
                         // if (pending_inv_acks_q == fwd_rx_d.num_inv_ack) begin
                         if (pending_inv_acks <= fwd_rx_d.num_inv_ack) begin
-                            coherence_act.update_line_state = 1'b1;
+                            // coherence_act.update_line_state = 1'b1;
                             coherence_state_d               = HPDCACHE_MODIFIED;
                             free_coherence                  = 1'b1;
                         end
+                        coherence_act.update_line_state = 1'b1;
+                        coherence_state_d               = HPDCACHE_SMA;
                         // pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
                         pending_inv_acks_d              = pending_inv_acks - fwd_rx_d.num_inv_ack;
                     end
