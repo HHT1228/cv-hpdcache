@@ -1028,7 +1028,10 @@ import hpdcache_pkg::*;
             // if (refill_core_rsp_valid_d) begin
             //     coherence_refill_ready = 1'b1;
             // end else 
-            if (fwd_rx_valid_i && (!inv_stall || fwd_rx_i.fwd_msg_type == GET)) begin
+            if (coherence_rsp_valid_i) begin
+                coherence_rsp_ready_o       = 1'b1;
+            end
+            else if (fwd_rx_valid_i && (!inv_stall || fwd_rx_i.fwd_msg_type == GET)) begin
                 fwd_rx_ready_o              = 1'b1;
                 if (fwd_rx_i.fwd_msg_type == INV &&
                     core_req_valid_i && 
@@ -1037,9 +1040,10 @@ import hpdcache_pkg::*;
                     // INV CMO can be handled together with coherence INV without conflict
                     coherence_core_req_ready = 1'b1;
                 end
-            end else if (coherence_rsp_valid_i) begin
-                coherence_rsp_ready_o       = 1'b1;
             end 
+            // else if (coherence_rsp_valid_i) begin
+            //     coherence_rsp_ready_o       = 1'b1;
+            // end 
             // else if (coherence_replace_d) begin
             //     replace_ready = 1'b1;
             // end 
@@ -1052,16 +1056,11 @@ import hpdcache_pkg::*;
                  !refill_busy_d && 
                  !coherence_act.update_line_state &&
                  coherence_act.hit) begin
-            // FIXME: comb loop
-            if (fwd_rx_valid_i && (!inv_stall || fwd_rx_i.fwd_msg_type == GET)) begin
+            if (coherence_rsp_valid_i) begin
+                coherence_rsp_ready_o       = 1'b1;
+            end
+            else if (fwd_rx_valid_i && (!inv_stall || fwd_rx_i.fwd_msg_type == GET)) begin
                 fwd_rx_ready_o              = 1'b1;
-                // if (fwd_rx_i.fwd_msg_type == INV &&
-                //     core_req_valid_i && 
-                //     !core_req_stall && 
-                //     core_req_i.op == HPDCACHE_REQ_CMO_INVAL_NLINE) begin
-                //     // INV CMO can be handled together with coherence INV without conflict
-                //     coherence_core_req_ready = 1'b1;
-                // end
             end else 
             if (core_req_valid_i && core_req_is_rw) begin
                 coherence_core_req_ready    = 1'b1;
@@ -1178,6 +1177,7 @@ import hpdcache_pkg::*;
             fwd_rx_q                <= fwd_rx_d;
 
             coherence_rsp_valid_q   <= 1'b0;
+            coherence_rsp_q         <= coherence_rsp_d;
         end else if (op_decoded && !pending_core_req_d) begin
             core_req_q              <= core_req_d;
             core_req_tag_q          <= core_req_tag_d;
@@ -1970,6 +1970,8 @@ import hpdcache_pkg::*;
                     end
                     OP_INV_ACK_CNT: begin
                         pending_inv_acks_d              = coherence_rsp_d.inv_ack_cnt;
+                        // coherence_state_d               = HPDCACHE_SMA;
+                        coherence_state_d               = (pending_inv_acks_d == 0) ? HPDCACHE_MODIFIED : HPDCACHE_SMA;
                         coherence_act.update_line_state = 1'b1;
                         free_coherence = 1'b1;
                     end
@@ -1979,9 +1981,11 @@ import hpdcache_pkg::*;
                             // coherence_act.update_line_state = 1'b1;
                             coherence_state_d               = HPDCACHE_MODIFIED;
                             free_coherence                  = 1'b1;
+                        end else begin
+                            coherence_state_d               = HPDCACHE_SMA;
                         end
                         coherence_act.update_line_state = 1'b1;
-                        coherence_state_d               = HPDCACHE_SMA;
+                        // coherence_state_d               = HPDCACHE_SMA;
                         // pending_inv_acks_d              = pending_inv_acks_q - fwd_rx_d.num_inv_ack;
                         pending_inv_acks_d              = pending_inv_acks - fwd_rx_d.num_inv_ack;
                     end
