@@ -5,3 +5,6 @@ VRMDATA/
 *.wlf
 *.ucdb
 *.swp
+
+CLAUDE.md
+claude_doc

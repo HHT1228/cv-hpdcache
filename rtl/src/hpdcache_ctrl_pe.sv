@@ -284,13 +284,18 @@ import hpdcache_pkg::*;
 
     //  Data-cache control lines
     //  {{{
+    logic nop;
+    logic st1_nop; //  Do not consume a request in stage 0 because of stage 1 hazard
+    logic st2_nop; //  Do not consume a request in stage 0 because of stage 2 hazard
+    logic st0_req_is_pstore;
+    logic st0_req_is_pamo;
     always_comb
     begin : hpdcache_ctrl_comb
-        automatic logic nop;
-        automatic logic st1_nop; //  Do not consume a request in stage 0 because of stage 1 hazard
-        automatic logic st2_nop; //  Do not consume a request in stage 0 because of stage 2 hazard
-        automatic logic st0_req_is_pstore;
-        automatic logic st0_req_is_pamo;
+        // automatic logic nop;
+        // automatic logic st1_nop; //  Do not consume a request in stage 0 because of stage 1 hazard
+        // automatic logic st2_nop; //  Do not consume a request in stage 0 because of stage 2 hazard
+        // automatic logic st0_req_is_pstore;
+        // automatic logic st0_req_is_pamo;
 
         uc_req_valid_o                      = 1'b0;
 

@@ -1786,5 +1786,52 @@ import hpdcache_pkg::*;
             $error("ctrl: no victim way selected during MSHR allocation");
 `endif
     //  }}}
+
+    logic req_valid_q, hit_evt, req_evt;
+    hpdcache_req_tid_t req_tid_q;
+    logic [32-1:0] req_cnt_q, req_cnt_d;
+    logic [32-1:0] hit_cnt_q, hit_cnt_d;
+    // `FF(req_valid_q, core_req_valid_i, 1'b0, clk_i, rst_ni)
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            req_valid_q <= '0;
+        end else begin
+            req_valid_q <= core_req_valid_i;
+        end
+    end
+
+    // `FF(req_tid_q, core_req_i.tid, 'h0, clk_i, rst_ni)
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            req_tid_q <= 'h0;
+        end else begin
+            req_tid_q <= core_req_i.tid;
+        end
+    end
+
+    // `FF(req_cnt_q, req_cnt_d, 32'h0, clk_i, rst_ni)
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            req_cnt_q <= 32'h0;
+        end else begin
+            req_cnt_q <= req_cnt_d;
+        end
+    end
+
+    // `FF(hit_cnt_q, hit_cnt_d, 32'h0, clk_i, rst_ni)
+    always_ff @(posedge clk_i or negedge rst_ni) begin
+        if (!rst_ni) begin
+            hit_cnt_q <= 32'h0;
+        end else begin
+            hit_cnt_q <= hit_cnt_d;
+        end
+    end
+
+    assign hit_evt = req_valid_q && core_rsp_valid_o && (req_tid_q == core_rsp_o.tid);
+    assign req_evt = core_req_valid_i && core_req_ready_o && (core_req_i.op == HPDCACHE_REQ_LOAD || core_req_i.op == HPDCACHE_REQ_STORE);
+
+    assign hit_cnt_d = hit_evt ? hit_cnt_q + 1 : hit_cnt_q;
+    assign req_cnt_d = req_evt ? req_cnt_q + 1 : req_cnt_q;
+
 endmodule
 // vim: ts=4 : sts=4 : sw=4 : et : tw=100 : spell : spelllang=en : fdm=marker
